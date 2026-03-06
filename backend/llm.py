@@ -1,19 +1,35 @@
-"""
-LLM – Interface de langage naturel.
-Priorité: Ollama (local) → Gemini → fallback message d'erreur.
-"""
 import json
 import requests
+import re
+import subprocess
+import webbrowser
 from typing import Generator
 from config import (
     LLM_PROVIDER, OLLAMA_BASE_URL, OLLAMA_MODEL,
     GEMINI_API_KEY, OPENAI_API_KEY,
     MAX_HISTORY_TURNS, SYSTEM_PROMPT, PERSONA_NAME
 )
+from memory import memory
 
-# Historique conversationnel en mémoire
+# Historique conversationnel chargé depuis la mémoire
 _conversation_history: list[dict] = []
 
+def _get_system_instructions():
+    """Génère les instructions système avec le contexte de mémoire et les actions."""
+    facts = memory.get_all_facts()
+    facts_str = "\n- ".join(facts) if facts else "Aucun fait marquant connu."
+    
+    context = f"\n\n[MÉMOIRE À LONG TERME]\nTu te souviens de ces faits sur l'utilisateur :\n- {facts_str}"
+    
+    actions = """
+[SYSTEM ACTIONS]
+Tu peux interagir avec l'ordinateur de l'utilisateur en ajoutant un tag à la fin de ton message :
+- [ACTION:OPEN_URL|url] : Ouvre une adresse web.
+- [ACTION:EXEC|commande] : Lance une application ou commande (ex: spotify, calc).
+- [SAVE_FACT:description] : Enregistre une information importante sur l'utilisateur pour tes prochaines sessions.
+Exemple: "Je m'en souviendrai. [SAVE_FACT: L'utilisateur s'appelle Thomas]"
+"""
+    return SYSTEM_PROMPT + context + actions
 
 def _trim_history():
     """Garde seulement les N derniers tours."""
@@ -21,17 +37,44 @@ def _trim_history():
     if len(_conversation_history) > MAX_HISTORY_TURNS * 2:
         _conversation_history = _conversation_history[-(MAX_HISTORY_TURNS * 2):]
 
-
 def reset_history():
-    """Réinitialise le contexte conversationnel."""
+    """Réinitialise le contexte conversationnel et recharge depuis la mémoire."""
     global _conversation_history
-    _conversation_history = []
-    print("[LLM] Historique réinitialisé.")
+    _conversation_history = memory.get_recent_history(MAX_HISTORY_TURNS)
+    print(f"[LLM] Historique rechargé depuis la mémoire ({len(_conversation_history)} messages).")
 
+def _process_output_tags(text: str) -> str:
+    """Analyse le texte pour extraire les faits et exécuter les actions."""
+    # 1. Enregistrement des faits
+    facts = re.findall(r'\[SAVE_FACT:(.*?)\]', text)
+    for f in facts:
+        memory.add_fact(f.strip())
+        text = text.replace(f"[SAVE_FACT:{f}]", "")
+        print(f"[Memory] Nouveau fait enregistré: {f.strip()}")
+
+    # 2. Exécution des actions système
+    actions = re.findall(r'\[ACTION:(.*?)\]', text)
+    for act in actions:
+        try:
+            if "|" in act:
+                cmd_type, val = act.split("|", 1)
+                val = val.strip()
+                if cmd_type == "OPEN_URL":
+                    webbrowser.open(val)
+                    print(f"[Action] Ouverture URL: {val}")
+                elif cmd_type == "EXEC":
+                    subprocess.Popen(val, shell=True)
+                    print(f"[Action] Exécution commande: {val}")
+            text = text.replace(f"[ACTION:{act}]", "")
+        except Exception as e:
+            print(f"[Action] Erreur lors de l'exécution de {act}: {e}")
+
+    return text.strip()
 
 def _call_ollama(prompt: str) -> str:
-    """Appel au modèle Ollama local (non-stream pour simplicité)."""
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    """Appel au modèle Ollama local."""
+    system_instr = _get_system_instructions()
+    messages = [{"role": "system", "content": system_instr}]
     messages += _conversation_history
     messages.append({"role": "user", "content": prompt})
 
@@ -42,35 +85,25 @@ def _call_ollama(prompt: str) -> str:
                 "model": OLLAMA_MODEL,
                 "messages": messages,
                 "stream": False,
-                "options": {
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                    "num_predict": 300,
-                }
+                "options": {"temperature": 0.7, "num_predict": 300}
             },
             timeout=60
         )
         resp.raise_for_status()
-        data = resp.json()
-        return data["message"]["content"].strip()
-    except requests.exceptions.ConnectionError:
-        raise ConnectionError("Ollama non disponible – tentative fallback Gemini")
+        return resp.json()["message"]["content"].strip()
     except Exception as e:
-        raise RuntimeError(f"Erreur Ollama: {e}")
-
+        raise RuntimeError(f"Ollama error: {e}")
 
 def _call_gemini(prompt: str) -> str:
-    """Appel à l'API Gemini en fallback."""
+    """Appel à l'API Gemini."""
     if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY non configurée.")
+        raise ValueError("GEMINI_API_KEY manquante.")
 
     import google.generativeai as genai
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        "gemini-1.5-flash",
-        system_instruction=SYSTEM_PROMPT
-    )
-    # Reconstruit l'historique au format Gemini
+    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=_get_system_instructions())
+    
+    # Formatage de l'historique
     history = []
     for msg in _conversation_history:
         role = "user" if msg["role"] == "user" else "model"
@@ -80,41 +113,40 @@ def _call_gemini(prompt: str) -> str:
     response = chat.send_message(prompt)
     return response.text.strip()
 
-
 def generate_response(user_input: str) -> str:
-    """
-    Génère une réponse IA pour le texte utilisateur.
-    Essaie Ollama d'abord, puis Gemini, puis message de secours.
-    """
+    """Génère une réponse avec mémoire et actions système."""
     global _conversation_history
 
-    print(f"[LLM] Requête: {user_input[:80]}...")
-    response = ""
+    # Initialiser l'historique si vide
+    if not _conversation_history:
+        reset_history()
 
-    # Tentatives par ordre de priorité
-    providers = []
-    if LLM_PROVIDER == "ollama":
-        providers = [("ollama", _call_ollama), ("gemini", _call_gemini)]
-    elif LLM_PROVIDER == "gemini":
-        providers = [("gemini", _call_gemini), ("ollama", _call_ollama)]
-    else:
-        providers = [("ollama", _call_ollama), ("gemini", _call_gemini)]
+    # Log user input
+    memory.log_chat("user", user_input)
+
+    response = ""
+    providers = [("ollama", _call_ollama), ("gemini", _call_gemini)]
+    if LLM_PROVIDER == "gemini": providers = reversed(providers)
 
     for name, fn in providers:
         try:
             response = fn(user_input)
-            print(f"[LLM] Réponse ({name}): {response[:80]}...")
             break
         except Exception as e:
             print(f"[LLM] {name} échoué: {e}")
-            continue
 
     if not response:
-        response = "... Les ombres restent silencieuses pour l'instant."
+        response = "... Les ombres sont troublées."
 
-    # Mise à jour historique
+    # Traiter les tags [SAVE_FACT] et [ACTION]
+    final_text = _process_output_tags(response)
+
+    # Log assistant response
+    memory.log_chat("assistant", final_text)
+    
+    # Mise à jour de l'historique de session
     _conversation_history.append({"role": "user", "content": user_input})
-    _conversation_history.append({"role": "assistant", "content": response})
+    _conversation_history.append({"role": "assistant", "content": final_text})
     _trim_history()
 
-    return response
+    return final_text

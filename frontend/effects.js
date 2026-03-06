@@ -196,6 +196,37 @@ export class VFXManager {
         }
     }
 
+    /** Effet 'Arise' (Extraction d'ombre) - Apparition spectaculaire */
+    arise() {
+        if (this._bloomPass) {
+            this._bloomPass.strength = 6.0; // Explosion de lumière
+            const decrease = setInterval(() => {
+                this._bloomPass.strength -= 0.1;
+                if (this._bloomPass.strength <= 1.4) {
+                    this._bloomPass.strength = 1.4;
+                    clearInterval(decrease);
+                }
+            }, 30);
+        }
+
+        // Booster les particules temporairement
+        if (this._particles) {
+            const oldSpeeds = new Float32Array(this._particleSpeeds);
+            for (let i = 0; i < this._particleSpeeds.length; i++) this._particleSpeeds[i] *= 10;
+            setTimeout(() => {
+                this._particleSpeeds.set(oldSpeeds);
+            }, 1000);
+        }
+    }
+
+    /** Permet de changer la couleur de l'aura/thème */
+    setThemeColor(hex) {
+        const color = new THREE.Color(hex);
+        if (this._auraLight) this._auraLight.color.copy(color);
+        if (this._particles) this._particles.material.color.copy(color);
+        this._rimLights.forEach(l => l.color.copy(color).lerp(new THREE.Color(0xffffff), 0.3));
+    }
+
     /** Rendu via EffectComposer (remplace renderer.render()). */
     render() {
         this.composer.render();

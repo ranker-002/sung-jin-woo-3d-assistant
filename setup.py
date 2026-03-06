@@ -74,7 +74,9 @@ class SetupAPI:
         keys_to_update = {
             "PICOVOICE_ACCESS_KEY": config['picovoice'],
             "GEMINI_API_KEY": config['gemini'],
-            "LLM_PROVIDER": config['llm']
+            "LLM_PROVIDER": config['llm'],
+            "AURA_COLOR": config.get('auraColor', '#6600cc'),
+            "CHARACTER_SCALE": config.get('scale', '1.0')
         }
 
         updated_keys = set()

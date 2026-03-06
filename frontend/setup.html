@@ -317,21 +317,37 @@
 
         <!-- Étape 2: Configuration API -->
         <div id="view-config" class="view">
-            <div class="input-group">
-                <label>Clé Picovoice (Wake Word)</label>
-                <input type="text" id="api-picovoice" placeholder="ghX..." />
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="input-group">
+                    <label>Clé Picovoice</label>
+                    <input type="text" id="api-picovoice" placeholder="ghX..." />
+                </div>
+                <div class="input-group">
+                    <label>Clé Gemini</label>
+                    <input type="password" id="api-gemini" placeholder="AIza..." />
+                </div>
             </div>
-            <div class="input-group">
-                <label>Clé Gemini (Cerveau de secours)</label>
-                <input type="password" id="api-gemini" placeholder="AIza..." />
-            </div>
+
             <div class="input-group">
                 <label>Moteur LLM Préféré</label>
                 <select id="llm-provider"
-                    style="width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(139,92,246,0.4); padding:10px; color:white; font-family:inherit;">
+                    style="width:100%; background:rgba(0, 0, 0, 0.3); border:1px solid rgba(139, 92, 246, 0.4); padding:10px; color:white; font-family:inherit;">
                     <option value="ollama">Ollama (Local - Gratuit)</option>
                     <option value="gemini">Gemini (Cloud - Très intelligent)</option>
                 </select>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="input-group">
+                    <label>Couleur de l'Aura</label>
+                    <input type="color" id="aura-color" value="#6600cc" style="height: 44px; padding: 2px;">
+                </div>
+                <div class="input-group">
+                    <label>Taille du Monarque</label>
+                    <div style="display: flex; align-items: center; height: 44px;">
+                        <input type="range" id="scale" min="0.5" max="2.0" step="0.1" value="1.0">
+                    </div>
+                </div>
             </div>
 
             <div class="btn-container">
@@ -383,7 +399,9 @@
             const config = {
                 picovoice: document.getElementById('api-picovoice').value,
                 gemini: document.getElementById('api-gemini').value,
-                llm: document.getElementById('llm-provider').value
+                llm: document.getElementById('llm-provider').value,
+                auraColor: document.getElementById('aura-color').value,
+                scale: document.getElementById('scale').value
             };
 
             showView('view-install');

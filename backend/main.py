@@ -15,7 +15,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from config import WS_HOST, WS_PORT
+from config import WS_HOST, WS_PORT, AURA_COLOR, CHARACTER_SCALE
 from tts import synthesize
 from llm import generate_response, reset_history
 
@@ -102,6 +102,13 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     _active_connections.add(websocket)
     print(f"[WS] Client connecté. Total: {len(_active_connections)}")
+
+    # Envoi de la configuration visuelle
+    await websocket.send_text(json.dumps({
+        "type": "config",
+        "aura_color": AURA_COLOR,
+        "scale": CHARACTER_SCALE
+    }))
 
     # Message d'accueil
     await broadcast({"type": "status", "state": "idle"})

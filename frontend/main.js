@@ -135,8 +135,18 @@ function handleServerMessage(msg) {
             ui?.setStatus('idle');
             break;
 
+        case 'config':
+            handleConfig(msg);
+            break;
         case 'pong':
             break;
+    }
+}
+
+function handleConfig({ aura_color, scale }) {
+    if (aura_color) vfx?.setThemeColor(aura_color);
+    if (scale && character?.model) {
+        character.model.scale.setScalar(scale);
     }
 }
 
@@ -235,6 +245,10 @@ async function main() {
     // Personnage
     character = new Character(scene);
     await character.load('assets/models/sung_jin_woo.glb');
+
+    // Effet 'Arise' au démarrage
+    character.arise();
+    vfx?.arise();
 
     // Lip-sync
     lipSync = new LipSyncController(character);

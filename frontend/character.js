@@ -178,6 +178,22 @@ export class Character {
         console.log('[Character] Placeholder créé ✓');
     }
 
+    /** Effet 'Arise' - Apparition avec mise à l'échelle */
+    arise() {
+        if (!this.model) return;
+        this.model.scale.setScalar(0);
+        let s = 0;
+        const interval = setInterval(() => {
+            s += 0.05;
+            if (s >= 1.0) {
+                s = 1.0;
+                clearInterval(interval);
+                this.setState(States.IDLE);
+            }
+            this.model.scale.setScalar(s);
+        }, 20);
+    }
+
     /** Joue un clip par nom avec cross-fade. */
     _playClip(name, loop = true) {
         const next = this.clips[name];

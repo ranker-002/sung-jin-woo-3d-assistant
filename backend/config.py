@@ -56,3 +56,6 @@ WINDOW_WIDTH = 400
 WINDOW_HEIGHT = 700
 WINDOW_X = int(os.getenv("WINDOW_X", "50"))
 WINDOW_Y = int(os.getenv("WINDOW_Y", "100"))
+# ─── Préférences Visuelles ──────────────────────────────────────────────────
+AURA_COLOR = os.getenv("AURA_COLOR", "#6600cc")
+CHARACTER_SCALE = float(os.getenv("CHARACTER_SCALE", "1.0"))
