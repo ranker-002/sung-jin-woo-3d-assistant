@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env
+.env.local
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project Assets (don't commit large binary models if possible, use a guide)
+# backend/models/
+# frontend/assets/models/*.glb
+# frontend/assets/animations/*.fbx
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.bak

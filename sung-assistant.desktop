@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Exec=/home/ranker/DEV/sung/.venv/bin/python /home/ranker/DEV/sung/app.py
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name[fr_FR]=Sung Jin Woo Assistant
+Name=Sung Jin Woo Assistant
+Comment[fr_FR]=Lancer l'assistant virtuel Shadow Monarch au démarrage
+Comment=Start the Shadow Monarch virtual assistant on login
