@@ -1,0 +1,31 @@
+{
+  "name": "sung-jin-woo-assistant",
+  "version": "1.0.0",
+  "description": "3D Desktop Virtual Assistant - Sung Jin Woo",
+  "main": "index.js",
+  "bin": {
+    "sung-install": "./bin/cli.js"
+  },
+  "scripts": {
+    "start": "python3 app.py",
+    "setup": "python3 setup.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ranker-002/sung-jin-woo-3d-assistant.git"
+  },
+  "keywords": [
+    "assistant",
+    "3d",
+    "solo-leveling",
+    "desktop",
+    "ai"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "prompts": "^2.4.2",
+    "shelljs": "^0.8.5"
+  }
+}

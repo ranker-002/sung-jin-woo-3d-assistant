@@ -17,7 +17,22 @@ Un assistant virtuel 3D réaliste inspiré de **Sung Jin Woo** (Solo Leveling) q
 
 ---
 
-## 🛠️ Installation
+## 🛠️ Installation Rapide (Solo Leveling Style)
+
+### Option A : via NPX (Recommandé)
+Lancez l'installateur interactif sans cloner manuellement :
+```bash
+npx github:ranker-002/sung-jin-woo-3d-assistant
+```
+
+### Option B : via CURL (One-liner)
+```bash
+curl -sSL https://raw.githubusercontent.com/ranker-002/sung-jin-woo-3d-assistant/main/install.sh | bash
+```
+
+---
+
+## 🏗️ Installation Manuelle
 
 ### 1. Prérequis
 ```bash
@@ -26,24 +41,11 @@ pip
 Ollama (optionnel, recommandé)
 ```
 
-### 2. Installer les dépendances Python
+### 2. Cloner et Lancer le Wizard
 ```bash
-cd /home/ranker/DEV/sung
-pip install -r backend/requirements.txt
-# Pour gTTS (fallback TTS gratuit)
-pip install gTTS
-```
-
-### 3. Installer Ollama (LLM local)
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull llama3
-```
-
-### 4. Configurer (optionnel)
-```bash
-cp .env .env.local
-# Éditer .env avec vos clés API (Gemini, ElevenLabs...)
+git clone https://github.com/ranker-002/sung-jin-woo-3d-assistant.git
+cd sung-jin-woo-3d-assistant
+bash install.sh
 ```
 
 ---
