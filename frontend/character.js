@@ -24,11 +24,10 @@ export class Character {
         this.morphTargets = null;  // référence aux mesh avec morph targets (bouche)
         this._clock = new THREE.Clock();
 
-        // Paramètres d'animation procédurale
-        this._headBone = null;
-        this._spineBone = null;
-        this._breathTime = 0;
-        this._idleSwayTime = 0;
+        // Poursuite du regard (LookAt)
+        this.bones = { neck: null, head: null, spine: null };
+        this._targetLook = new THREE.Vector2(0, 0);
+        this._currentLook = new THREE.Vector2(0, 0);
     }
 
     /**
@@ -60,12 +59,6 @@ export class Character {
                         this.morphTargets.push(node);
                     }
                 }
-                // Identifier les bones clés
-                if (node.isBone || node.type === 'Bone') {
-                    const lname = node.name.toLowerCase();
-                    if (lname.includes('head')) this._headBone = node;
-                    if (lname.includes('spine') && lname.includes('2')) this._spineBone = node;
-                }
             });
 
             // Centrer et positionner
@@ -93,6 +86,10 @@ export class Character {
 
             // Démarrer l'animation idle
             this._playClip('idle', true);
+
+            // Identifier les os pour le LookAt
+            this._findBones();
+
             console.log('[Character] Modèle chargé avec succès ✓');
 
         } catch (err) {
@@ -267,7 +264,46 @@ export class Character {
     /** Boucle de mise à jour principale. */
     update(delta) {
         if (this.mixer) this.mixer.update(delta);
+        this._updateLookAt(delta);
         this._updateProcedural(delta);
+    }
+
+    /** Oriente la tête et le cou vers une cible (ex: souris) */
+    lookAt(targetX, targetY) {
+        // Coordonnées normalisées -1 à 1
+        this._targetLook.x = targetX;
+        this._targetLook.y = targetY;
+    }
+
+    _updateLookAt(delta) {
+        const neck = this.bones.neck || this._headBone; // Fallback sur l'ancien nom si besoin
+        if (!neck) return;
+
+        // Vitesse de suivi
+        const lerpFactor = delta * 5;
+        this._currentLook.x += (this._targetLook.x - this._currentLook.x) * lerpFactor;
+        this._currentLook.y += (this._targetLook.y - this._currentLook.y) * lerpFactor;
+
+        // Limites de rotation
+        const limitX = 0.6;
+        const limitY = 0.4;
+
+        neck.rotation.y = THREE.MathUtils.lerp(neck.rotation.y, -this._currentLook.x * limitX, 0.1);
+        neck.rotation.x = THREE.MathUtils.lerp(neck.rotation.x, -this._currentLook.y * limitY, 0.1);
+    }
+
+    _findBones() {
+        if (!this.model) return;
+        this.model.traverse(node => {
+            if (node.isBone) {
+                const name = node.name.toLowerCase();
+                if (name.includes('neck')) this.bones.neck = node;
+                if (name.includes('head')) this.bones.head = node;
+                if (name.includes('spine')) this.bones.spine = node;
+            }
+        });
+        // Si on a trouvé des os, on assigne à _headBone pour la compatibilité procedural
+        this._headBone = this.bones.head || this.bones.neck;
     }
 
     /** Animations procédurales (respiration, balancement de tête). */

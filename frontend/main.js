@@ -48,6 +48,17 @@ function initScene() {
 
     // Redimensionnement
     window.addEventListener('resize', onResize);
+
+    // Suivi de la souris
+    window.addEventListener('mousemove', onMouseMove);
+}
+
+function onMouseMove(e) {
+    if (!character) return;
+    // Normaliser les coordonnées (-1 à 1)
+    const x = (e.clientX / window.innerWidth) * 2 - 1;
+    const y = (e.clientY / window.innerHeight) * 2 - 1;
+    character.lookAt(x, y);
 }
 
 function onResize() {

@@ -10,6 +10,7 @@ import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
 import pvporcupine
+from pathlib import Path
 
 from config import (
     WHISPER_MODEL, WHISPER_DEVICE, WHISPER_LANGUAGE,
@@ -121,6 +122,7 @@ class MicrophoneListener:
                     if keyword_index >= 0:
                         print("[STT] Wake word détecté !")
                         self._is_waiting_for_wake = False
+                        self._play_system_sound("wake")
                         if self.on_status_change:
                             self.on_status_change("listening")
                         # On vide le buffer pour commencer l'enregistrement frais
@@ -164,26 +166,50 @@ class MicrophoneListener:
             print(f"[STT] Transcription: {text}")
             self.on_transcription(text)
 
+    def _play_system_sound(self, sound_type="wake"):
+        """Joue un petit son système pour le feedback (ex: anime)."""
+        sound_path = Path(f"frontend/assets/audio/{sound_type}.wav")
+        if not sound_path.exists():
+            return
+
+        try:
+            import scipy.io.wavfile as wav
+            fs, data = wav.read(sound_path)
+            sd.play(data, fs)
+        except Exception as e:
+            print(f"[STT] Impossible de jouer le son {sound_type}: {e}")
+
     def start(self):
         self._running = True
         self._thread = threading.Thread(target=self._process_loop, daemon=True)
         self._thread.start()
-        self._stream = sd.InputStream(
-            samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype="float32",
-            blocksize=self._block_size,
-            callback=self._audio_callback
-        )
-        self._stream.start()
-        status = "en attente de mot-clé" if self._is_waiting_for_wake else "en écoute continue"
-        print(f"[STT] Écoute microphone démarrée ({status}) ✓")
+
+        # Détection robuste du périphérique d'entrée
+        try:
+            device_info = sd.query_devices(kind='input')
+            print(f"[STT] Utilisation du micro : {device_info['name']}")
+            
+            self._stream = sd.InputStream(
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype="float32",
+                blocksize=self._block_size,
+                callback=self._audio_callback
+            )
+            self._stream.start()
+            status = "en attente de mot-clé" if self._is_waiting_for_wake else "en écoute continue"
+            print(f"[STT] Écoute microphone démarrée ({status}) ✓")
+        except Exception as e:
+            print(f"[STT] ERREUR MICROPHONE : {e}")
+            self._running = False
 
     def stop(self):
         self._running = False
-        if hasattr(self, "_stream"):
-            self._stream.stop()
-            self._stream.close()
+        if hasattr(self, "_stream") and self._stream:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except: pass
         if self._porcupine:
             self._porcupine.delete()
         print("[STT] Écoute arrêtée.")
