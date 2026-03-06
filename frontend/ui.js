@@ -24,6 +24,29 @@ export class UIManager {
 
         this._bindEvents();
         this._setupSpeechRecognition();
+
+        // Conteneur boutons (à gauche)
+        const btnContainer = document.createElement('div');
+        btnContainer.className = 'ui-btn-container';
+        btnContainer.style.cssText = `
+          position: absolute; bottom: 20px; left: 20px;
+          display: flex; gap: 10px;
+        `;
+
+        // Bouton micro
+        this.micBtn = this._createBtn('🎤');
+
+        // Bouton Système (Settings)
+        this.sysBtn = this._createBtn('⚙️');
+        this.sysBtn.title = 'Système (Paramètres)';
+
+        btnContainer.appendChild(this.micBtn);
+        btnContainer.appendChild(this.sysBtn);
+        document.body.appendChild(btnContainer);
+
+        // Event listeners for new buttons
+        this.micBtn.onclick = () => this._toggleMic(); // Use existing _toggleMic
+        this.sysBtn.onclick = () => this.openSettings();
     }
 
     _bindEvents() {
@@ -38,7 +61,7 @@ export class UIManager {
             }
         });
 
-        // Microphone
+        // Microphone (original button, now potentially redundant if micBtn is used)
         this.$mic.addEventListener('click', () => this._toggleMic());
 
         // Drag fenêtre (exposé via pywebview ou CSS)
@@ -65,6 +88,7 @@ export class UIManager {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) {
             this.$mic.title = 'Micro non supporté';
+            this.micBtn.title = 'Micro non supporté'; // Update new button too
             return;
         }
 
@@ -84,6 +108,7 @@ export class UIManager {
         this._recognition.onend = () => {
             this._micActive = false;
             this.$mic.classList.remove('active');
+            this.micBtn.classList.remove('active'); // Update new button too
             this.setStatus('idle');
         };
 
@@ -91,6 +116,7 @@ export class UIManager {
             console.warn('[Mic] Erreur:', e.error);
             this._micActive = false;
             this.$mic.classList.remove('active');
+            this.micBtn.classList.remove('active'); // Update new button too
         };
     }
 
@@ -140,5 +166,41 @@ export class UIManager {
     hideLoader() {
         this.$loader.classList.add('hidden');
         setTimeout(() => { this.$loader.style.display = 'none'; }, 1000);
+    }
+
+    // ── Paramètres ────────────────────────────────────────────────────────────────
+    openSettings() {
+        console.log('[UI] Ouverture des paramètres système...');
+        if (window.pywebview && window.pywebview.api.open_settings) {
+            window.pywebview.api.open_settings();
+        }
+    }
+
+    _createBtn(icon) {
+        const btn = document.createElement('button');
+        btn.innerHTML = icon;
+        btn.style.cssText = `
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; align-items: center; justify-content: center;
+        `;
+        btn.onmouseover = () => {
+            btn.style.transform = 'scale(1.1)';
+            btn.style.background = 'rgba(139, 92, 246, 0.4)';
+            btn.style.boxShadow = '0 0 15px rgba(139, 92, 246, 0.3)';
+        };
+        btn.onmouseout = () => {
+            btn.style.transform = 'scale(1)';
+            btn.style.background = 'rgba(139, 92, 246, 0.2)';
+            btn.style.boxShadow = 'none';
+        };
+        return btn;
     }
 }

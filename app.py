@@ -15,6 +15,7 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 sys.path.insert(0, str(BACKEND_DIR))
 
 import webview
+import subprocess
 from backend.config import WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_X, WINDOW_Y, WS_PORT, WS_HOST
 from backend.main   import run_server
 
@@ -38,6 +39,10 @@ class SungJinWooAPI:
     def show(self):
         """Affiche la fenêtre."""
         self._window.show()
+
+    def open_settings(self):
+        """Lance l'interface de configuration."""
+        subprocess.Popen([sys.executable, str(BASE_DIR / "setup.py")])
 
     def quit(self):
         """Quitte l'application."""
