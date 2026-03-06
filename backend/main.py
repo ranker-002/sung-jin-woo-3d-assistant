@@ -46,6 +46,7 @@ app.add_middleware(
 
 async def broadcast(message: dict):
     """Envoie un message JSON à tous les clients connectés."""
+    global _active_connections
     disconnected = set()
     payload = json.dumps(message, ensure_ascii=False)
     for ws in _active_connections.copy():

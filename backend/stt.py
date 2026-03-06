@@ -6,11 +6,15 @@ import queue
 import threading
 import os
 import time
+import sys
 import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
 import pvporcupine
 from pathlib import Path
+
+# Assurer l'accès aux modules locaux
+sys.path.insert(0, os.path.dirname(__file__))
 
 from config import (
     WHISPER_MODEL, WHISPER_DEVICE, WHISPER_LANGUAGE,
@@ -58,13 +62,16 @@ class MicrophoneListener:
     2. RECORDING : enregistre jusqu'au silence
     3. TRANSCRIPTION : envoie au LLM
     """
+    _stream: sd.InputStream | None = None
+    _porcupine: pvporcupine.Porcupine | None = None
+    _thread: threading.Thread | None = None
 
     def __init__(self, on_transcription, on_status_change=None):
         self.on_transcription = on_transcription
         self.on_status_change = on_status_change
         self._audio_queue: queue.Queue = queue.Queue()
         self._running = False
-        self._thread: threading.Thread | None = None
+        self._thread = None
         self._block_size = int(SAMPLE_RATE * BLOCK_DURATION)
         
         # État Picovoice
@@ -93,12 +100,15 @@ class MicrophoneListener:
         self._audio_queue.put(indata.copy())
 
     def _process_loop(self):
-        buffer = []
-        silence_blocks = 0
-        max_silence_blocks = SILENCE_DURATION / BLOCK_DURATION
+        buffer: list[np.ndarray] = []
+        silence_blocks: int = 0
+        max_silence_blocks = int(SILENCE_DURATION / BLOCK_DURATION)
         
         # Taille de frame requise par Porcupine
-        porcupine_frame_length = self._porcupine.frame_length if self._porcupine else 512
+        porcupine_frame_length = 512
+        if self._porcupine:
+            porcupine_frame_length = self._porcupine.frame_length
+        
         audio_stream_buffer = np.array([], dtype=np.float32)
 
         while self._running:
@@ -117,7 +127,10 @@ class MicrophoneListener:
                     
                     # Conversion float32 -> int16 pour Porcupine
                     pcm = (frame * 32767).astype(np.int16)
-                    keyword_index = self._porcupine.process(pcm)
+                    if self._porcupine:
+                        keyword_index = self._porcupine.process(pcm)
+                    else:
+                        keyword_index = -1
                     
                     if keyword_index >= 0:
                         print("[STT] Wake word détecté !")
@@ -136,7 +149,7 @@ class MicrophoneListener:
             buffer.append(block)
 
             if rms < SILENCE_THRESHOLD:
-                silence_blocks += 1
+                silence_blocks = silence_blocks + 1
             else:
                 silence_blocks = 0
 
@@ -173,7 +186,7 @@ class MicrophoneListener:
             return
 
         try:
-            import scipy.io.wavfile as wav
+            import scipy.io.wavfile as wav  # type: ignore
             fs, data = wav.read(sound_path)
             sd.play(data, fs)
         except Exception as e:
@@ -196,7 +209,8 @@ class MicrophoneListener:
                 blocksize=self._block_size,
                 callback=self._audio_callback
             )
-            self._stream.start()
+            if self._stream:
+                self._stream.start()
             status = "en attente de mot-clé" if self._is_waiting_for_wake else "en écoute continue"
             print(f"[STT] Écoute microphone démarrée ({status}) ✓")
         except Exception as e:

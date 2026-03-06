@@ -66,7 +66,8 @@ export class Character {
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
             this.model.position.sub(center);
-            this.model.position.y = -size.y / 2;
+            // On ne décale pas vers le bas, on garde le centre du modèle à (0,0,0)
+            // car la caméra regarde déjà vers (0, 0.5, 0)
             this.model.scale.setScalar(1.0);
 
             this.scene.add(this.model);
@@ -93,7 +94,7 @@ export class Character {
             console.log('[Character] Modèle chargé avec succès ✓');
 
         } catch (err) {
-            console.warn('[Character] Modèle GLB non trouvé, utilisation du placeholder:', err.message);
+            console.error('[Character] Échec chargement GLB:', err);
             this._createPlaceholder();
         }
     }
@@ -104,12 +105,12 @@ export class Character {
     async _loadMixamoAnimations() {
         const animations = [
             { name: 'idle', file: 'standing_idle.fbx' },
-            { name: 'breathing', file: 'breathing_idle.fbx' },
+            { name: 'breathing', file: 'standing_idle.fbx' }, // Fallback to standing_idle
             { name: 'talking', file: 'talking.fbx' },
             { name: 'thinking', file: 'thinking.fbx' },
             { name: 'nodding', file: 'nodding.fbx' },
-            { name: 'gesture1', file: 'gesture_talking.fbx' },
-            { name: 'listening', file: 'head_tilt_listening.fbx' },
+            { name: 'gesture1', file: 'talking.fbx' },      // Fallback to talking
+            { name: 'listening', file: 'standing_idle.fbx' }, // Fallback to idle
         ];
 
         const fbxLoader = new FBXLoader();
@@ -181,17 +182,22 @@ export class Character {
     /** Effet 'Arise' - Apparition avec mise à l'échelle */
     arise() {
         if (!this.model) return;
-        this.model.scale.setScalar(0);
-        let s = 0;
-        const interval = setInterval(() => {
-            s += 0.05;
+        console.log('[Character] Shadow Monarch Arise!');
+        this.model.scale.setScalar(0.01); // Presque invisible mais pas 0
+        let s = 0.01;
+        const animateScale = () => {
+            s += 0.02;
             if (s >= 1.0) {
                 s = 1.0;
-                clearInterval(interval);
+                this.model.scale.setScalar(s);
                 this.setState(States.IDLE);
+                console.log('[Character] Personnage prêt ✓');
+                return;
             }
             this.model.scale.setScalar(s);
-        }, 20);
+            requestAnimationFrame(animateScale);
+        };
+        requestAnimationFrame(animateScale);
     }
 
     /** Joue un clip par nom avec cross-fade. */

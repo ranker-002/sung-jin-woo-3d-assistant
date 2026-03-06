@@ -1,0 +1,20 @@
+[pywebview] GTK cannot be loaded
+Traceback (most recent call last):
+  File "/home/ranker/DEV/sung/.venv/lib/python3.14/site-packages/webview/guilib.py", line 39, in import_gtk
+    import webview.platforms.gtk as guilib
+  File "/home/ranker/DEV/sung/.venv/lib/python3.14/site-packages/webview/platforms/gtk.py", line 28, in <module>
+    import gi
+ModuleNotFoundError: No module named 'gi'
+[pywebview] QT cannot be loaded
+Traceback (most recent call last):
+  File "/home/ranker/DEV/sung/.venv/lib/python3.14/site-packages/webview/guilib.py", line 51, in import_qt
+    import webview.platforms.qt as guilib
+  File "/home/ranker/DEV/sung/.venv/lib/python3.14/site-packages/webview/platforms/qt.py", line 29, in <module>
+    from qtpy import QtCore
+ModuleNotFoundError: No module named 'qtpy'
+==================================================
+  Shadow Monarch – Sung Jin Woo Assistant
+==================================================
+[App] Démarrage du serveur backend...
+[Server] Démarrage du serveur Sung Jin Woo Assistant...
+[App] Backend prêt sur ws://localhost:8765 ✓

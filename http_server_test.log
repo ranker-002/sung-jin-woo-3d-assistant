@@ -1,0 +1,33 @@
+127.0.0.1 - - [06/Mar/2026 23:25:58] "HEAD /assets/models/sung_jin_woo.glb HTTP/1.1" 200 -
+127.0.0.1 - - [06/Mar/2026 23:26:11] "GET /assets/models/sung_jin_woo.glb HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:26:12] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:26:12] "GET /assets/animations/breathing_idle.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:26:12] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:26:12] "GET /assets/animations/gesture_talking.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:26:12] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:26:12] "GET /assets/animations/head_tilt_listening.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:26:12] "GET /assets/animations/standing_idle.fbx HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:26:12] "GET /assets/animations/talking.fbx HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:26:12] "GET /assets/animations/nodding.fbx HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:26:12] "GET /assets/animations/thinking.fbx HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:27:00] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:27:00] "GET /assets/animations/breathing_idle.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:27:00] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:27:00] "GET /assets/animations/gesture_talking.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:27:00] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:27:00] "GET /assets/animations/head_tilt_listening.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:28:47] "GET /assets/models/sung_jin_woo.glb HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:28:59] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:28:59] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:30:17] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:30:17] "GET /assets/animations/breathing_idle.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:30:17] "GET /assets/animations/standing_idle.fbx HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:30:17] "GET /assets/animations/talking.fbx HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:30:17] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:30:17] "GET /assets/animations/gesture_talking.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:30:17] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:30:17] "GET /assets/animations/head_tilt_listening.fbx HTTP/1.1" 404 -
+127.0.0.1 - - [06/Mar/2026 23:30:17] "GET /assets/animations/thinking.fbx HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:30:17] "GET /assets/animations/nodding.fbx HTTP/1.1" 304 -
+127.0.0.1 - - [06/Mar/2026 23:33:51] code 404, message File not found
+127.0.0.1 - - [06/Mar/2026 23:33:51] "GET /favicon.ico HTTP/1.1" 404 -

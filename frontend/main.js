@@ -26,8 +26,12 @@ function initScene() {
 
     // Camera légèrement en dessous du niveau des yeux pour vue cinématique
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 0.2, 3.2);
-    camera.lookAt(0, 0.5, 0);
+    camera.position.set(0, 0.4, 3.5);
+    camera.lookAt(0, 0.4, 0);
+
+    // Axes helper pour le debug
+    const axes = new THREE.AxesHelper(3);
+    scene.add(axes);
 
     renderer = new THREE.WebGLRenderer({
         antialias: true,

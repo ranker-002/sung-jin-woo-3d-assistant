@@ -7,8 +7,12 @@ import os
 import base64
 import tempfile
 import threading
+import sys
 import numpy as np
 from pathlib import Path
+
+# Assurer l'accès aux modules locaux
+sys.path.insert(0, os.path.dirname(__file__))
 
 from config import (
     TTS_ENGINE, TTS_LANGUAGE,
@@ -170,7 +174,8 @@ def synthesize(text: str) -> tuple[str, float, list[dict]]:
     Point d'entrée principal TTS.
     Retourne (audio_base64, duration_ms, visemes_list)
     """
-    print(f"[TTS] Synthèse ({TTS_ENGINE}): {text[:60]}...")
+    display_text = str(text)[:60]
+    print(f"[TTS] Synthèse ({TTS_ENGINE}): {display_text}...")
     try:
         if TTS_ENGINE == "elevenlabs" and ELEVENLABS_API_KEY:
             return _synthesize_elevenlabs(text)

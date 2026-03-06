@@ -3,7 +3,13 @@ import requests
 import re
 import subprocess
 import webbrowser
+import os
+import sys
 from typing import Generator
+
+# Assurer l'accès aux modules locaux
+sys.path.insert(0, os.path.dirname(__file__))
+
 from config import (
     LLM_PROVIDER, OLLAMA_BASE_URL, OLLAMA_MODEL,
     GEMINI_API_KEY, OPENAI_API_KEY,
@@ -111,7 +117,10 @@ def _call_gemini(prompt: str) -> str:
 
     chat = model.start_chat(history=history)
     response = chat.send_message(prompt)
-    return response.text.strip()
+    
+    if hasattr(response, 'text') and response.text:
+        return response.text.strip()
+    return "... Les ombres gardent le silence."
 
 def generate_response(user_input: str) -> str:
     """Génère une réponse avec mémoire et actions système."""

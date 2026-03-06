@@ -88,7 +88,7 @@ def main():
         frameless     = True,         # Pas de barre de titre
         transparent   = True,         # Fond transparent
         on_top        = True,         # Always-on-top
-        background_color = '#00000000',  # RGBA transparent
+        background_color = '#000000',  # Triplet hex side-by-side with transparent=True
         shadow        = False,
         easy_drag     = True,         # Drag via CSS drag region
     )
