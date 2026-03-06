@@ -4,14 +4,18 @@ Capture microphone → segments de phrases → texte.
 """
 import queue
 import threading
+import os
+import time
 import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
+import pvporcupine
 
 from config import (
     WHISPER_MODEL, WHISPER_DEVICE, WHISPER_LANGUAGE,
     SAMPLE_RATE, CHANNELS, BLOCK_DURATION,
-    SILENCE_THRESHOLD, SILENCE_DURATION
+    SILENCE_THRESHOLD, SILENCE_DURATION,
+    PICOVOICE_ACCESS_KEY, WAKE_WORD, WAKE_WORD_SENSITIVITY
 )
 
 _model: WhisperModel | None = None
@@ -48,16 +52,39 @@ def transcribe_audio(audio: np.ndarray) -> str:
 class MicrophoneListener:
     """
     Écoute le microphone en continu.
-    Détecte les pauses de silence pour segmenter les énoncés.
-    Appelle `on_transcription(text)` pour chaque phrase détectée.
+    Phases : 
+    1. WAKE_WORD : attend le mot clé (si configuré)
+    2. RECORDING : enregistre jusqu'au silence
+    3. TRANSCRIPTION : envoie au LLM
     """
 
-    def __init__(self, on_transcription):
+    def __init__(self, on_transcription, on_status_change=None):
         self.on_transcription = on_transcription
+        self.on_status_change = on_status_change
         self._audio_queue: queue.Queue = queue.Queue()
         self._running = False
         self._thread: threading.Thread | None = None
         self._block_size = int(SAMPLE_RATE * BLOCK_DURATION)
+        
+        # État Picovoice
+        self._porcupine = None
+        if PICOVOICE_ACCESS_KEY:
+            try:
+                keyword_path = [WAKE_WORD] if os.path.exists(WAKE_WORD) else None
+                keywords = [WAKE_WORD] if not keyword_path else None
+                self._porcupine = pvporcupine.create(
+                    access_key=PICOVOICE_ACCESS_KEY,
+                    keywords=keywords,
+                    keyword_paths=keyword_path,
+                    sensitivities=[WAKE_WORD_SENSITIVITY]
+                )
+                print(f"[STT] Wake Word '{WAKE_WORD}' activé ✓")
+                self._is_waiting_for_wake = True
+            except Exception as e:
+                print(f"[STT] Erreur Picovoice (AccessKey valide ?): {e}")
+                self._is_waiting_for_wake = False
+        else:
+            self._is_waiting_for_wake = False
 
     def _audio_callback(self, indata, frames, time_info, status):
         if status:
@@ -68,13 +95,41 @@ class MicrophoneListener:
         buffer = []
         silence_blocks = 0
         max_silence_blocks = SILENCE_DURATION / BLOCK_DURATION
+        
+        # Taille de frame requise par Porcupine
+        porcupine_frame_length = self._porcupine.frame_length if self._porcupine else 512
+        audio_stream_buffer = np.array([], dtype=np.float32)
 
         while self._running:
             try:
-                block = self._audio_queue.get(timeout=0.5)
+                block = self._audio_queue.get(timeout=0.1)
+                # Normalisation pour Porcupine (int16)
+                audio_stream_buffer = np.append(audio_stream_buffer, block.flatten())
             except queue.Empty:
                 continue
 
+            # Phase 1: Attente Wake Word
+            if self._is_waiting_for_wake and self._porcupine:
+                while len(audio_stream_buffer) >= porcupine_frame_length:
+                    frame = audio_stream_buffer[:porcupine_frame_length]
+                    audio_stream_buffer = audio_stream_buffer[porcupine_frame_length:]
+                    
+                    # Conversion float32 -> int16 pour Porcupine
+                    pcm = (frame * 32767).astype(np.int16)
+                    keyword_index = self._porcupine.process(pcm)
+                    
+                    if keyword_index >= 0:
+                        print("[STT] Wake word détecté !")
+                        self._is_waiting_for_wake = False
+                        if self.on_status_change:
+                            self.on_status_change("listening")
+                        # On vide le buffer pour commencer l'enregistrement frais
+                        buffer = [] 
+                        silence_blocks = 0
+                        break
+                continue
+
+            # Phase 2: Enregistrement après Wake Word (ou si Wake Word désactivé)
             rms = np.sqrt(np.mean(block ** 2))
             buffer.append(block)
 
@@ -83,13 +138,19 @@ class MicrophoneListener:
             else:
                 silence_blocks = 0
 
-            # Phrase détectée : assez de silence après parole
+            # Détection fin de phrase
             if silence_blocks >= max_silence_blocks and len(buffer) > int(max_silence_blocks):
                 audio_data = np.concatenate(buffer, axis=0).flatten().astype(np.float32)
                 buffer = []
                 silence_blocks = 0
+                
+                # Repasser en mode attente Wake Word si configuré
+                if self._porcupine:
+                    self._is_waiting_for_wake = True
+                    if self.on_status_change:
+                        self.on_status_change("idle")
 
-                # Transcription dans un thread séparé pour ne pas bloquer
+                # Transcription
                 audio_copy = audio_data.copy()
                 threading.Thread(
                     target=self._transcribe_and_emit,
@@ -115,11 +176,14 @@ class MicrophoneListener:
             callback=self._audio_callback
         )
         self._stream.start()
-        print("[STT] Écoute microphone démarrée ✓")
+        status = "en attente de mot-clé" if self._is_waiting_for_wake else "en écoute continue"
+        print(f"[STT] Écoute microphone démarrée ({status}) ✓")
 
     def stop(self):
         self._running = False
         if hasattr(self, "_stream"):
             self._stream.stop()
             self._stream.close()
+        if self._porcupine:
+            self._porcupine.delete()
         print("[STT] Écoute arrêtée.")

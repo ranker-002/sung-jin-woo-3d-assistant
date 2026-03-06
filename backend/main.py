@@ -143,7 +143,12 @@ def start_stt_listener(loop: asyncio.AbstractEventLoop):
                 process_user_input(text), loop
             )
 
-        _stt_listener = MicrophoneListener(on_transcription)
+        def on_status_change(state: str):
+            asyncio.run_coroutine_threadsafe(
+                broadcast({"type": "status", "state": state}), loop
+            )
+
+        _stt_listener = MicrophoneListener(on_transcription, on_status_change)
         _stt_listener.start()
     except ImportError as e:
         print(f"[STT] Module non disponible (sounddevice?): {e}")

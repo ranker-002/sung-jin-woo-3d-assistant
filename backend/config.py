@@ -18,6 +18,11 @@ WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "fr")       # langue de transcr
 SILENCE_THRESHOLD = float(os.getenv("SILENCE_THRESHOLD", "0.01"))
 SILENCE_DURATION = float(os.getenv("SILENCE_DURATION", "1.5"))  # secondes de silence
 
+# ─── Wake Word (Picovoice) ──────────────────────────────────────────────────
+PICOVOICE_ACCESS_KEY = os.getenv("PICOVOICE_ACCESS_KEY", "")
+WAKE_WORD = os.getenv("WAKE_WORD", "porcupine")  # ex: 'porcupine', 'jarvis', ou chemin vers .ppn
+WAKE_WORD_SENSITIVITY = float(os.getenv("WAKE_WORD_SENSITIVITY", "0.5"))
+
 # ─── LLM ───────────────────────────────────────────────────────────────────────
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")           # ollama | gemini | openai
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
