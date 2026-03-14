@@ -30,10 +30,11 @@ function initScene() {
     scene = new THREE.Scene();
     scene.background = null; // Transparent !
 
-    // Camera légèrement en dessous du niveau des yeux pour vue cinématique
+    // Camera cinématique adaptée à la taille du personnage (1.8m)
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 0.4, 3.5);
-    camera.lookAt(0, 0.4, 0);
+    camera.position.set(0, 1.0, 4.2); // Reculé et monté pour voir le buste
+    camera.lookAt(0, 0.9, 0); // Regarde vers le torse/visage
+
 
     // Lights setup
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);

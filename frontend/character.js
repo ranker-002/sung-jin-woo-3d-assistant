@@ -41,11 +41,27 @@ export class Character {
      * Si aucun modèle n'est trouvé, crée un placeholder géométrique.
      */
     async load(modelPath = 'assets/models/sung_jin_woo.glb') {
-        const loader = new GLTFLoader();
+        const gltfLoader = new GLTFLoader();
+        const fbxLoader = new FBXLoader();
 
         try {
-            const gltf = await loader.loadAsync(modelPath);
-            this.model = gltf.scene;
+            let loadedObject;
+            if (modelPath.endsWith('.glb')) {
+                const gltf = await gltfLoader.loadAsync(modelPath);
+                loadedObject = gltf.scene;
+                // Check if it's rigged. If no SkinnedMesh, we might want to try fallback.
+                let hasBones = false;
+                loadedObject.traverse(n => { if (n.isSkinnedMesh) hasBones = true; });
+                
+                if (!hasBones && modelPath === 'assets/models/sung_jin_woo.glb') {
+                    console.warn('[Character] GLB lacks bones, trying FBX fallback...');
+                    throw new Error('No bones');
+                }
+            } else {
+                loadedObject = await fbxLoader.loadAsync(modelPath);
+            }
+
+            this.model = loadedObject;
             this.model.name = "SungJinWoo";
 
             // Configuration du modèle
@@ -54,13 +70,11 @@ export class Character {
                     node.castShadow = true;
                     node.receiveShadow = false;
 
-                    // Amélioration matériaux
                     if (node.material) {
                         node.material.envMapIntensity = 1.2;
                         node.material.needsUpdate = true;
                     }
 
-                    // Trouver les morph targets pour le lip sync
                     if (node.morphTargetDictionary && Object.keys(node.morphTargetDictionary).length > 0) {
                         if (!this.morphTargets) this.morphTargets = [];
                         this.morphTargets.push(node);
@@ -68,57 +82,62 @@ export class Character {
                 }
             });
 
-            // Centrer et positionner (pieds à 0,0,0)
+            // Positionnement & Échelle
             const box = new THREE.Box3().setFromObject(this.model);
             const size = box.getSize(new THREE.Vector3());
-            
-            // On veut qu'il fasse environ 1.8 - 2.0 unités de haut
             const targetHeight = 1.8;
-            const scale = targetHeight / size.y;
-            this.targetScale = scale;
-            this.model.scale.setScalar(scale);
+            this.targetScale = targetHeight / (size.y || 1);
+            this.model.scale.setScalar(this.targetScale);
             
-            // Repositionner pour que les pieds soient au sol (y=0) après scale
             const newBox = new THREE.Box3().setFromObject(this.model);
-            const min = newBox.min;
-            this.model.position.y -= min.y;
+            this.model.position.y -= newBox.min.y;
             this.model.position.x -= (newBox.max.x + newBox.min.x) / 2;
             this.model.position.z -= (newBox.max.z + newBox.min.z) / 2;
 
-            this.scene.add(this.model);
-            
-            // Ombre au sol (plane transparent)
-            const planeGeom = new THREE.PlaneGeometry(10, 10);
-            const planeMat = new THREE.ShadowMaterial({ opacity: 0.3 });
-            const ground = new THREE.Mesh(planeGeom, planeMat);
-            ground.rotation.x = -Math.PI / 2;
-            ground.position.y = 0;
-            ground.receiveShadow = true;
-            this.scene.add(ground);
-
-
-            // Mixer d'animations
-            this.mixer = new THREE.AnimationMixer(this.model);
-
-            // Charger animations intégrées GLTF
-            if (gltf.animations?.length > 0) {
-                gltf.animations.forEach(clip => {
-                    this.clips[clip.name.toLowerCase()] = this.mixer.clipAction(clip);
-                });
+            // Correction orientation (Mixamo FBX are often rotated)
+            if (modelPath.endsWith('.fbx')) {
+                // Mixamo often needs y=0 rotation but check if it's sideways
+                this.model.rotation.y = 0; 
             }
 
-            // Charger animations externes Mixamo (non-bloquant)
-            this._loadMixamoAnimations();
+            this.scene.add(this.model);
+            
+            // Ground for shadows
+            this._addGround();
 
-            // Identifier les os pour le LookAt
+            // Mixer
+            this.mixer = new THREE.AnimationMixer(this.model);
+
+            // Mixer update loop test: expose to window for debug
+            window.character = this;
+
+            // Load animations
+            this._loadMixamoAnimations();
             this._findBones();
 
             console.log('[Character] Modèle chargé avec succès ✓');
 
         } catch (err) {
-            console.error('[Character] Échec chargement GLB:', err);
+            console.error('[Character] Échec chargement modèle principal:', err);
+            // Fallback to the suggested FBX if we failed GLB
+            if (modelPath.endsWith('.glb')) {
+                console.log('[Character] Tentative de secours avec FBX...');
+                return this.load('assets/animations/standing_idle.fbx');
+            }
             this._createPlaceholder();
         }
+    }
+
+    _addGround() {
+        if (this.scene.getObjectByName('ground-shadow')) return;
+        const planeGeom = new THREE.PlaneGeometry(10, 10);
+        const planeMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+        const ground = new THREE.Mesh(planeGeom, planeMat);
+        ground.name = 'ground-shadow';
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = 0;
+        ground.receiveShadow = true;
+        this.scene.add(ground);
     }
 
     /**
@@ -366,10 +385,19 @@ export class Character {
         this._breathTime += delta * 0.6;
         this._idleSwayTime += delta * 0.3;
 
-        // Respiration légère sur le scale Y
-        if (this.model && this.state === States.IDLE) {
+        // Respiration et flottement (bobbing)
+        if (this.model) {
             const breathScale = 1.0 + Math.sin(this._breathTime) * 0.008;
-            this.model.scale.y = breathScale;
+            const floatY = Math.sin(this._breathTime * 0.5) * 0.02; // Flottement léger
+            
+            if (this.state === States.IDLE) {
+                this.model.scale.set(this.targetScale, this.targetScale * breathScale, this.targetScale);
+            }
+            
+            // Appliquer le flottement vertical (en plus de la position initiale)
+            // On ne modifie pas position.y directement si on veut que les pieds restent à 0,
+            // mais pour Sung Jin Woo (Shadow), flotter un peu est stylé.
+            this.model.position.y += Math.sin(this._breathTime) * 0.0005; 
         }
 
         // Léger balancement tête
