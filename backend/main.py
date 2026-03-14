@@ -57,7 +57,7 @@ async def broadcast(message: dict):
     _active_connections -= disconnected
 
 
-async def process_user_input(text: str):
+async def process_user_input(text: str, is_proactive: bool = False):
     """
     Pipeline complet:
     texte utilisateur → LLM → TTS → broadcast vers frontend
@@ -65,8 +65,11 @@ async def process_user_input(text: str):
     if not text.strip():
         return
 
-    # 1. Notifier le frontend que l'assistant réfléchit
-    await broadcast({"type": "status", "state": "thinking", "text": text})
+    # Si c'est proactif, on ne simule pas l'écriture utilisateur
+    if not is_proactive:
+        await broadcast({"type": "status", "state": "thinking", "text": text})
+    else:
+        await broadcast({"type": "status", "state": "thinking"})
 
     try:
         # 2. Générer la réponse LLM (bloquant → thread pool)
@@ -174,6 +177,25 @@ def start_stt_listener(loop: asyncio.AbstractEventLoop):
     except Exception as e:
         print(f"[STT] Erreur démarrage: {e}")
 
+def proactive_heartbeat_loop(loop: asyncio.AbstractEventLoop):
+    """Vérifie l'inactivité et déclenche une intervention de l'IA si besoin."""
+    from llm import _last_activity_time, generate_proactive_thought
+    import time as pytime
+    
+    PROACTIVITY_THRESHOLD = 300 # 5 minutes de silence
+    
+    while True:
+        pytime.sleep(60) # Vérifie chaque minute
+        idle_duration = pytime.time() - _last_activity_time
+        
+        if idle_duration > PROACTIVITY_THRESHOLD:
+            print("[System] Proactivity Triggered!")
+            # On génère une pensée sans gain d'XP (car c'est l'IA qui parle)
+            text, emotion = generate_proactive_thought()
+            if text:
+                # Synthèse et broadcast
+                asyncio.run_coroutine_threadsafe(process_user_input(text, is_proactive=True), loop)
+
 
 def run_server(start_mic: bool = True):
     """Lance le serveur WebSocket avec ou sans écoute microphone."""
@@ -183,6 +205,9 @@ def run_server(start_mic: bool = True):
     if start_mic:
         # Lancer STT après démarrage du serveur
         threading.Timer(2.0, lambda: start_stt_listener(loop)).start()
+    
+    # Lancer le moniteur de proactivité (Heartbeat)
+    threading.Thread(target=proactive_heartbeat_loop, args=(loop,), daemon=True).start()
 
     uvicorn.run(
         app,

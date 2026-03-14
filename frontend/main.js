@@ -133,6 +133,7 @@ function handleServerMessage(msg) {
     switch (msg.type) {
         case 'status':
             handleStatus(msg.state, msg.text);
+            resetIdleTimer();
             break;
 
         case 'speech':
@@ -172,15 +173,32 @@ function handleConfig({ emotion, scale }) {
     }
 }
 
-/** Update Level & XP Bar */
+/** Update Level & XP Bar with Quadratic Scaling */
 function updateDungeonStats(level, xp) {
     const lvlEl = document.getElementById('lvl-val');
     const xpFill = document.getElementById('xp-fill');
     if (lvlEl) lvlEl.textContent = `LVL ${level}`;
+    
     if (xpFill) {
-        const progress = xp % 100; // Simplifié: 100 XP par niveau
-        xpFill.style.width = `${progress}%`;
+        // Calcul des paliers (lvl-1)^2 * 100 -> (lvl)^2 * 100
+        const currentLvlStart = Math.pow(level - 1, 2) * 100;
+        const nextLvlEnd = Math.pow(level, 2) * 100;
+        const range = nextLvlEnd - currentLvlStart;
+        const progress = ((xp - currentLvlStart) / range) * 100;
+        
+        xpFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
     }
+}
+
+let idleTimer = null;
+function resetIdleTimer() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+        if (state === 'idle') {
+            character?.setState(States.THINKING); // Utilise 'thinking' comme pose de méditation
+            vfx?.setThemeColor('thinking'); // Aura turquoise apaisante
+        }
+    }, 45000); // 45 secondes d'inactivité -> Méditation
 }
 
 /** Drag & Drop Handling */

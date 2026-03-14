@@ -19,11 +19,13 @@ from memory import memory
 
 # Historique conversationnel chargé depuis la mémoire
 _conversation_history: list[dict] = []
+_last_activity_time = time.time()
 
-def _get_system_instructions(user_query: str = ""):
+def _get_system_instructions(user_query: str = "", proactive=False):
     """Génère les instructions système avec le contexte de mémoire sémantique et les actions."""
     # Recherche sémantique de faits pertinents pour la requête actuelle
-    relevant_facts = memory.search_relevant_facts(user_query, limit=3)
+    query_for_facts = user_query if not proactive else "pensées intérieures"
+    relevant_facts = memory.search_relevant_facts(query_for_facts, limit=3)
     facts_str = "\n- ".join(relevant_facts) if relevant_facts else "Analysant le flux de données..."
     
     # Récupérer le dernier résumé pour garder la trace des interactions passées
@@ -47,6 +49,29 @@ def _get_system_instructions(user_query: str = ""):
 - [EMOTION:type] : Change ton aura (angry, calm, power, thinking, happy).
 """
     return SYSTEM_PROMPT + context + actions
+
+def generate_proactive_thought() -> tuple[str, str]:
+    """Génère une intervention spontanée du Monarque."""
+    prompt = "L'utilisateur est silencieux depuis un moment. Fais une remarque stoïque, pose une question courte ou rappelle-lui ses objectifs. Sois très bref."
+    
+    try:
+        # On passe proactive=True pour ajuster les instructions système
+        if LLM_PROVIDER == "ollama":
+             system_instr = _get_system_instructions(proactive=True)
+             resp = requests.post(f"{OLLAMA_BASE_URL}/api/chat", json={
+                 "model": OLLAMA_MODEL,
+                 "messages": [{"role": "system", "content": system_instr}, {"role": "user", "content": prompt}],
+                 "stream": False,
+                 "options": {"temperature": 0.8, "num_predict": 100}
+             }, timeout=30)
+             response = resp.json()["message"]["content"].strip()
+        else:
+             response = "Le silence est parfois nécessaire pour aiguiser sa lame."
+             
+        final_text, emotion = _process_output_tags(response)
+        return final_text, emotion
+    except:
+        return "", "thinking"
 
 def _should_summarize():
     """Détermine si on doit générer un résumé (ex: tous les 15 messages)."""
@@ -205,8 +230,9 @@ def _call_openai(prompt: str) -> str:
 
 def generate_response(user_input: str) -> tuple[str, str]:
     """Génère une réponse avec mémoire et actions système."""
-    global _conversation_history
+    global _conversation_history, _last_activity_time
 
+    _last_activity_time = time.time()
     # Initialiser l'historique si vide
     if not _conversation_history:
         reset_history()
