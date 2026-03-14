@@ -124,12 +124,28 @@ sung/
 
 ## 🔧 Configuration avancée
 
-| Variable | Defaut | Description |
-|----------|--------|-------------|
 | `WHISPER_MODEL` | `small` | `tiny` (rapide) / `medium` (précis) |
-| `LLM_PROVIDER` | `openai` | `openai`, `ollama`, `gemini` |
-| `TTS_ENGINE` | `sovits` | `sovits`, `coqui`, `elevenlabs`, `gtts` |
+| `LLM_PROVIDER` | `ollama` | `openai`, `ollama`, `gemini` |
+| `TTS_ENGINE` | `coqui` | `sovits`, `coqui`, `elevenlabs`, `piper`, `gtts` |
 | `WINDOW_X` / `Y` | `50`/`100` | Position fenêtre sur le bureau |
+
+---
+
+## 🦅 Version 100% Gratuite & Locale (Air Gap Ready)
+
+Pour faire tourner Sung Jin Woo sans aucune clé API et sans envoyer vos données sur le cloud :
+
+1. **LLM local** : Installez [Ollama](https://ollama.com) et lancez le modèle : `ollama run mistral` (ou `llama3`).
+2. **STT local** : Déjà intégré via `faster-whisper`.
+3. **TTS local** : 
+   - **Coqui** (recommandé pour la qualité) : `TTS_ENGINE=coqui` dans `.env`.
+   - **Piper** (recommandé pour la vitesse) : `TTS_ENGINE=piper` dans `.env`.
+4. **Configuration `.env`** :
+   ```bash
+   LLM_PROVIDER=ollama
+   OLLAMA_MODEL=mistral
+   TTS_ENGINE=coqui
+   ```
 
 ---
 

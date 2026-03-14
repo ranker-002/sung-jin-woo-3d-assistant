@@ -71,7 +71,7 @@ async def process_user_input(text: str):
     try:
         # 2. Générer la réponse LLM (bloquant → thread pool)
         loop = asyncio.get_event_loop()
-        response_text, emotion = await loop.run_in_executor(None, generate_response, text)
+        response_text, emotion, xp, level = await loop.run_in_executor(None, generate_response, text)
 
         # 3. Synthèse vocale + visèmes
         await broadcast({"type": "status", "state": "speaking"})
@@ -86,7 +86,9 @@ async def process_user_input(text: str):
             "audio": audio_b64,
             "duration_ms": duration_ms,
             "visemes": visemes,
-            "emotion": emotion
+            "emotion": emotion,
+            "xp": xp,
+            "level": level
         })
 
     except Exception as e:
@@ -110,6 +112,14 @@ async def websocket_endpoint(websocket: WebSocket):
         "type": "config",
         "aura_color": AURA_COLOR,
         "scale": CHARACTER_SCALE
+    }))
+
+    # Sync stats (Dungeon Mode)
+    stats = memory.get_stats()
+    await websocket.send_text(json.dumps({
+        "type": "stats_sync",
+        "level": stats.get('level', 1),
+        "xp": stats.get('xp', 0)
     }))
 
     # Message d'accueil

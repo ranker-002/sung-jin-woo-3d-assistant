@@ -288,10 +288,44 @@
       0%, 100% { opacity: 0.8; }
       50%       { opacity: 0.4; }
     }
+
+    /* Dungeon Stats */
+    #dungeon-stats {
+        position: absolute;
+        top: 30px;
+        right: 20px;
+        text-align: right;
+        font-family: 'Rajdhani', sans-serif;
+        color: #8b5cf6;
+        text-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+        pointer-events: none;
+        z-index: 100;
+        transition: opacity 0.5s;
+    }
+    #lvl-val { font-size: 24px; font-weight: 700; display: block; letter-spacing: 1px; }
+    #xp-bar { width: 80px; height: 3px; background: rgba(255,255,255,0.05); margin-top: 4px; border-radius: 2px; overflow: hidden; margin-left: auto; }
+    #xp-fill { width: 0%; height: 100%; background: #8b5cf6; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px #8b5cf6; }
+
+    /* Drop Zone */
+    #drop-overlay {
+        position: fixed; inset: 0;
+        background: rgba(139, 92, 246, 0.1);
+        border: 2px dashed rgba(139, 92, 246, 0.5);
+        display: none; align-items: center; justify-content: center;
+        z-index: 2000; pointer-events: none;
+        color: white; font-family: 'Rajdhani', sans-serif; font-size: 24px;
+        backdrop-filter: blur(4px);
+    }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <div id="drop-overlay">ANALYSE D'OBJET...</div>
+  
+  <div id="dungeon-stats">
+    <span id="lvl-val">LVL 1</span>
+    <div id="xp-bar"><div id="xp-fill"></div></div>
+  </div>
 
   <!-- Loader d'initialisation -->
   <div id="loader">

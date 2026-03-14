@@ -20,22 +20,59 @@ from memory import memory
 # Historique conversationnel chargé depuis la mémoire
 _conversation_history: list[dict] = []
 
-def _get_system_instructions():
-    """Génère les instructions système avec le contexte de mémoire et les actions."""
-    facts = memory.get_all_facts()
-    facts_str = "\n- ".join(facts) if facts else "Aucun fait marquant connu."
+def _get_system_instructions(user_query: str = ""):
+    """Génère les instructions système avec le contexte de mémoire sémantique et les actions."""
+    # Recherche sémantique de faits pertinents pour la requête actuelle
+    relevant_facts = memory.search_relevant_facts(user_query, limit=3)
+    facts_str = "\n- ".join(relevant_facts) if relevant_facts else "Analysant le flux de données..."
     
-    context = f"\n\n[MÉMOIRE À LONG TERME]\nTu te souviens de ces faits sur l'utilisateur :\n- {facts_str}"
+    # Récupérer le dernier résumé pour garder la trace des interactions passées
+    last_summary = memory.get_last_summary()
+    summary_context = f"\n[RÉSUMÉ DES ÉCHANGES PASSÉS]\n{last_summary}" if last_summary else ""
+    
+    # Stats (Dungeon Mode)
+    stats = memory.get_stats()
+    stats_str = f"[DONJON STATUS] Niveau: {stats.get('level', 1)} | XP: {stats.get('xp', 0)}"
+
+    context = f"{stats_str}\n{summary_context}\n\n[MÉMOIRE SÉMANTIQUE (Faits pertinents)]\n- {facts_str}"
     
     actions = """
 [SYSTEM ACTIONS]
-Tu peux interagir avec l'ordinateur de l'utilisateur en ajoutant un tag à la fin de ton message :
 - [ACTION:OPEN_URL|url] : Ouvre une adresse web.
 - [ACTION:EXEC|commande] : Lance une application ou commande (ex: spotify, calc).
-- [SAVE_FACT:description] : Enregistre une information importante sur l'utilisateur pour tes prochaines sessions.
-Exemple: "Je m'en souviendrai. [SAVE_FACT: L'utilisateur s'appelle Thomas]"
+- [ACTION:VOL|+-N] : Ajuste le volume (ex: VOL|+10, VOL|-5).
+- [ACTION:WEATHER|city] : Demande la météo (ex: WEATHER|Paris).
+- [ACTION:SYS_INFO] : Récupère les ressources (CPU/RAM) de la machine.
+- [SAVE_FACT:description] : Enregistre une information sur l'utilisateur.
+- [EMOTION:type] : Change ton aura (angry, calm, power, thinking, happy).
 """
     return SYSTEM_PROMPT + context + actions
+
+def _should_summarize():
+    """Détermine si on doit générer un résumé (ex: tous les 15 messages)."""
+    # Pour simplifier, on vérifie la longueur de l'historique
+    return len(_conversation_history) >= 14
+
+def _generate_summary():
+    """Génère un résumé de la conversation actuelle et l'enregistre."""
+    global _conversation_history
+    print("[LLM] Génération d'un résumé de session...")
+    
+    prompt = "Résume brièvement les points clés, les décisions et les préférences de l'utilisateur dans cette conversation pour conserver une trace à long terme."
+    
+    # On utilise une version courte du prompt pour le résumé
+    try:
+        if LLM_PROVIDER == "ollama":
+            summary = _call_ollama(prompt, is_summary_call=True)
+        else:
+            summary = _call_openai(prompt) # Fallback simple
+            
+        memory.add_summary(summary)
+        print(f"[Memory] Résumé enregistré : {summary[:50]}...")
+        # On peut vider l'historique de session maintenant qu'on a un résumé
+        _conversation_history = _conversation_history[-4:] # Garder juste un peu de contexte immédiat
+    except Exception as e:
+        print(f"[LLM] Échec du résumé : {e}")
 
 def _trim_history():
     """Garde seulement les N derniers tours."""
@@ -78,15 +115,28 @@ def _process_output_tags(text: str) -> tuple[str, str]:
                 elif cmd_type == "EXEC":
                     subprocess.Popen(val, shell=True)
                     print(f"[Action] Exécution commande: {val}")
+                elif cmd_type == "VOL":
+                    sign = val[0]
+                    amount = val[1:]
+                    cmd = f"pactl set-sink-volume @DEFAULT_SINK@ {sign}{amount}%"
+                    subprocess.run(cmd, shell=True)
+                    print(f"[Action] Volume: {val}")
+                elif cmd_type == "WEATHER":
+                    resp = requests.get(f"https://wttr.in/{val}?format=3")
+                    if resp.status_code == 200:
+                        text = text + f"\n[INFO SYSTEME: La météo à {val} est {resp.text.strip()}]"
+                elif cmd_type == "SYS_INFO":
+                    # Simulation simplifiée info sys
+                    text = text + "\n[INFO SYSTEME: CPU: 12%, RAM: 4.2GB/16GB, Système Stable]"
             text = text.replace(f"[ACTION:{act}]", "")
         except Exception as e:
             print(f"[Action] Erreur lors de l'exécution de {act}: {e}")
 
     return text.strip(), emotion
 
-def _call_ollama(prompt: str) -> str:
+def _call_ollama(prompt: str, is_summary_call=False) -> str:
     """Appel au modèle Ollama local."""
-    system_instr = _get_system_instructions()
+    system_instr = _get_system_instructions(prompt if not is_summary_call else "")
     messages = [{"role": "system", "content": system_instr}]
     messages += _conversation_history
     messages.append({"role": "user", "content": prompt})
@@ -98,7 +148,7 @@ def _call_ollama(prompt: str) -> str:
                 "model": OLLAMA_MODEL,
                 "messages": messages,
                 "stream": False,
-                "options": {"temperature": 0.7, "num_predict": 300}
+                "options": {"temperature": 0.7, "num_predict": 400 if not is_summary_call else 150}
             },
             timeout=60
         )
@@ -114,7 +164,7 @@ def _call_gemini(prompt: str) -> str:
 
     import google.generativeai as genai
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=_get_system_instructions())
+    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=_get_system_instructions(prompt))
     
     # Formatage de l'historique
     history = []
@@ -137,7 +187,7 @@ def _call_openai(prompt: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=OPENAI_API_KEY)
     
-    system_instr = _get_system_instructions()
+    system_instr = _get_system_instructions(prompt)
     messages = [{"role": "system", "content": system_instr}]
     messages += _conversation_history
     messages.append({"role": "user", "content": prompt})
@@ -193,6 +243,14 @@ def generate_response(user_input: str) -> tuple[str, str]:
     # Mise à jour de l'historique de session
     _conversation_history.append({"role": "user", "content": user_input})
     _conversation_history.append({"role": "assistant", "content": final_text})
-    _trim_history()
+    
+    # Gestion de la mémoire et résumé si nécessaire
+    if _should_summarize():
+        _generate_summary()
+    else:
+        _trim_history()
 
-    return final_text, emotion
+    # Gain d'XP pour le Monarque (Donjon Mode)
+    xp, level = memory.add_xp(10) # 10 XP par message
+    
+    return final_text, emotion, xp, level

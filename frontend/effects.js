@@ -142,7 +142,7 @@ export class VFXManager {
 
     // ── Brume au sol ─────────────────────────────────────────────────────────────
     _setupGroundFog() {
-        this.scene.fog = new THREE.FogExp2(0x000000, 0.0);  // transparent, pas de fog global
+        this.scene.fog = new THREE.FogExp2(0x0a0520, 0.05);  // Brouillard sombre au sol
     }
 
     // ── Boucle mise à jour ───────────────────────────────────────────────────────
@@ -180,7 +180,8 @@ export class VFXManager {
         // Pulsation aura
         if (this._auraLight) {
             const pulse = Math.sin(this._particleTime * 2.0) * 0.3 + 0.7;
-            this._auraLight.intensity = (characterState === 'speaking' ? 2.0 : 0.8) * pulse;
+            const boost = (characterState === 'speaking' || characterState === 'thinking') ? 2.5 : 0.8;
+            this._auraLight.intensity = boost * pulse;
         }
 
         // Rim light dynamique
@@ -219,8 +220,18 @@ export class VFXManager {
         }
     }
 
-    /** Permet de changer la couleur de l'aura/thème */
-    setThemeColor(hex) {
+    /** Permet de changer la couleur de l'aura/thème selon l'émotion */
+    setThemeColor(emotion) {
+        let hex = '#6600cc'; // par défaut : violet
+        
+        switch(emotion) {
+            case 'angry': hex = '#ff0033'; break;
+            case 'calm': hex = '#00ccff'; break;
+            case 'power': hex = '#cc00ff'; break;
+            case 'thinking': hex = '#00ffcc'; break;
+            case 'happy': hex = '#ffcc00'; break;
+        }
+
         const color = new THREE.Color(hex);
         if (this._auraLight) this._auraLight.color.copy(color);
         if (this._particles) this._particles.material.color.copy(color);

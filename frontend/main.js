@@ -7,6 +7,7 @@ import { Character, States } from './character.js';
 import { LipSyncController, AudioLipSync } from './lipsync.js';
 import { VFXManager } from './effects.js';
 import { UIManager } from './ui.js';
+import { sfx } from './sound.js';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 const WS_URL = 'ws://localhost:8765/ws';
@@ -135,7 +136,19 @@ function handleServerMessage(msg) {
             break;
 
         case 'speech':
+            ui?.setStatus('speaking');
+            character?.setState(States.SPEAKING);
+            vfx?.setThemeColor(msg.emotion || 'neutral');
+            if (msg.xp !== undefined) updateDungeonStats(msg.level, msg.xp);
             handleSpeech(msg);
+            break;
+
+        case 'config':
+            handleConfig(msg);
+            break;
+
+        case 'stats_sync':
+            updateDungeonStats(msg.level, msg.xp);
             break;
 
         case 'error':
@@ -144,19 +157,61 @@ function handleServerMessage(msg) {
             ui?.setStatus('idle');
             break;
 
-        case 'config':
-            handleConfig(msg);
-            break;
         case 'pong':
             break;
     }
 }
 
-function handleConfig({ aura_color, scale }) {
-    if (aura_color) vfx?.setThemeColor(aura_color);
+function handleConfig({ emotion, scale }) {
+    if (emotion) vfx?.setThemeColor(emotion);
     if (scale && character?.model) {
         character.model.scale.setScalar(scale);
     }
+}
+
+/** Update Level & XP Bar */
+function updateDungeonStats(level, xp) {
+    const lvlEl = document.getElementById('lvl-val');
+    const xpFill = document.getElementById('xp-fill');
+    if (lvlEl) lvlEl.textContent = `LVL ${level}`;
+    if (xpFill) {
+        const progress = xp % 100; // Simplifié: 100 XP par niveau
+        xpFill.style.width = `${progress}%`;
+    }
+}
+
+/** Drag & Drop Handling */
+function setupFileDrop() {
+    const overlay = document.getElementById('drop-overlay');
+    
+    window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (overlay) overlay.style.display = 'flex';
+    });
+    
+    window.addEventListener('dragleave', (e) => {
+        if (overlay) overlay.style.display = 'none';
+    });
+    
+    window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (overlay) overlay.style.display = 'none';
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const fileName = files[0].name;
+            const fileSize = (files[0].size / 1024).toFixed(1);
+            
+            // On envoie une requête spéciale d'analyse d'objet
+            sendToServer('user_input', { 
+                text: `[OBJET DÉPOSÉ] Analyse ce fichier : "${fileName}" (${fileSize} KB).` 
+            });
+            
+            // Effet visuel
+            vfx?.arise();
+            sfx.play('arise', 0.5);
+        }
+    });
 }
 
 function handleStatus(state, text = '') {
@@ -277,9 +332,11 @@ function toggleWander() {
         wanderSpeedX = 1.5; // Vitesse de marche
         
         if (character) character._playClip('breathing', true); // Peut être remplacé par 'walking'
+        sfx.play('ghost_whoosh', 0.4);
         wanderLoop();
     } else {
         btn?.classList.remove('active');
+        sfx.play('click', 0.3);
         if (character) character.setState(States.IDLE);
     }
 }
@@ -323,16 +380,25 @@ async function main() {
     // UI
     ui = new UIManager((userText) => {
         sendToServer('user_input', { text: userText });
+        // État de réflexion immédiat
+        ui?.setStatus('thinking');
+        character?.setState(States.THINKING);
+        vfx?.setThemeColor('thinking');
     });
 
     // Masquer le loader IMMÉDIATEMENT
     ui.hideLoader();
 
     // On n'attend pas toutes les animations pour afficher l'interface (lazy loading)
+    // Droit de glisser des fichiers sur le Monarque
+    setupFileDrop();
+    
+    // Reste de l'init...
     character.load('assets/models/sung_jin_woo.glb').then(() => {
          // Effet 'Arise' au démarrage once loaded
          character.arise();
          vfx?.arise();
+         sfx.play('arise', 0.8);
     });
 
 
@@ -350,6 +416,7 @@ async function main() {
     document.addEventListener('click', () => {
         if (!audioCtx) audioCtx = new AudioContext();
         if (audioCtx.state === 'suspended') audioCtx.resume();
+        sfx.init(); // Init SFX system
     }, { once: true });
 
     // Exposer send pour PyWebView

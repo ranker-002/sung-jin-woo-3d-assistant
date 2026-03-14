@@ -47,6 +47,10 @@ SOVITS_PROMPT_LANG = os.getenv("SOVITS_PROMPT_LANG", "fr")
 SOVITS_REF_AUDIO = os.getenv("SOVITS_REF_AUDIO", "")
 SOVITS_PROMPT_TEXT = os.getenv("SOVITS_PROMPT_TEXT", "")
 
+# ─── Piper TTS (Local Ultra-fast) ─────────────────────────────────────────────
+PIPER_MODEL = os.getenv("PIPER_MODEL", "fr-fr-siwis-low.onnx")
+PIPER_CONFIG = os.getenv("PIPER_CONFIG", "fr_FR-siwis-low.onnx.json")
+
 # ─── Personnalité (Chargé dynamiquement via YAML) ──────────────────────────────
 PERSONA_NAME = "Sung Jin Woo"
 SYSTEM_PROMPT = """Tu es Sung Jin Woo."""

@@ -16,10 +16,13 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from config import (
     TTS_ENGINE, TTS_LANGUAGE,
-    ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID,
     SOVITS_URL, SOVITS_TEXT_LANG, SOVITS_PROMPT_LANG,
-    SOVITS_REF_AUDIO, SOVITS_PROMPT_TEXT
+    SOVITS_REF_AUDIO, SOVITS_PROMPT_TEXT,
+    PIPER_MODEL, PIPER_CONFIG, BASE_DIR
 )
+
+_piper_voice = None
+_piper_lock = threading.Lock()
 
 # ─── Table de mapping phonème → visème (standard 15 visèmes) ──────────────────
 # Basé sur la spécification Microsoft Azure Viseme
@@ -189,6 +192,55 @@ def _synthesize_sovits(text: str) -> tuple[str, float, list[dict]]:
     visemes = _simple_visemes_from_text(text, duration_ms)
     return audio_b64, duration_ms, visemes
 
+
+def _synthesize_piper(text: str) -> tuple[str, float, list[dict]]:
+    """Synthèse avec Piper (ultra-rapide, local)."""
+    global _piper_voice
+    
+    with _piper_lock:
+        if _piper_voice is None:
+            try:
+                from piper.voice import PiperVoice
+                model_path = BASE_DIR / "backend" / "models" / PIPER_MODEL
+                config_path = BASE_DIR / "backend" / "models" / PIPER_CONFIG
+                
+                # Créer le dossier models s'il n'existe pas
+                model_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                if not model_path.exists():
+                     print(f"[TTS] Modèle Piper manquant à {model_path}. Fallback gTTS.")
+                     return _synthesize_gtts(text)
+
+                _piper_voice = PiperVoice.load(str(model_path), config_path=str(config_path))
+                print("[TTS] Piper prêt ✓")
+            except Exception as e:
+                print(f"[TTS] Erreur init Piper: {e}")
+                return _synthesize_gtts(text)
+
+    # Synthèse en mémoire
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        tmp_path = f.name
+
+    try:
+        with open(tmp_path, "wb") as wav_file:
+            _piper_voice.synthesize(text, wav_file)
+        
+        with open(tmp_path, "rb") as f:
+            audio_bytes = f.read()
+
+        import wave
+        with wave.open(tmp_path, 'rb') as wav:
+            frames = wav.getnframes()
+            rate = wav.getframerate()
+            duration_ms = (frames / float(rate)) * 1000
+
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        visemes = _simple_visemes_from_text(text, duration_ms)
+        return audio_b64, duration_ms, visemes
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
 def _synthesize_gtts(text: str) -> tuple[str, float, list[dict]]:
     """Fallback gratuit avec gTTS (nécessite internet)."""
     try:
@@ -228,6 +280,8 @@ def synthesize(text: str) -> tuple[str, float, list[dict]]:
             except Exception as e:
                 print(f"[TTS] Coqui échoué, fallback gTTS: {e}")
                 return _synthesize_gtts(text)
+        elif TTS_ENGINE == "piper":
+            return _synthesize_piper(text)
         else:
             return _synthesize_gtts(text)
     except Exception as e:

@@ -2,6 +2,7 @@
  * ui.js – Gestionnaire UI et WebSocket
  * Gère : statut, bulles de dialogue, saisie texte, microphone navigateur.
  */
+import { sfx } from './sound.js';
 
 export class UIManager {
     constructor(onUserInput) {
@@ -44,20 +45,31 @@ export class UIManager {
         document.body.appendChild(btnContainer);
 
         // Event listeners for new buttons
-        this.micBtn.onclick = () => this._toggleMic(); // Use existing _toggleMic
-        this.sysBtn.onclick = () => this.openSettings();
+        this.micBtn.onclick = () => { sfx.play('click'); this._toggleMic(); };
+        this.sysBtn.onclick = () => { sfx.play('click'); this.openSettings(); };
+        
+        
+        // Add hover sounds
+        const wanderBtn = document.getElementById('wander-btn');
+        [this.micBtn, this.sysBtn, this.$send, wanderBtn].forEach(btn => {
+            if (btn) btn.addEventListener('mouseenter', () => sfx.play('hover', 0.2));
+        });
         
         this._setupSpeechRecognition();
     }
 
     _bindEvents() {
         // Envoi par bouton
-        this.$send.addEventListener('click', () => this._submitInput());
+        this.$send.addEventListener('click', () => {
+            sfx.play('click');
+            this._submitInput();
+        });
 
         // Envoi par Entrée
         this.$input.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+                sfx.play('click');
                 this._submitInput();
             }
         });

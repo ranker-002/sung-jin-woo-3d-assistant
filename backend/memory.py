@@ -34,7 +34,6 @@ class LongTermMemory:
                 category TEXT
             )
         ''')
-        # Table pour les logs de chat (complet)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS chat_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +42,40 @@ class LongTermMemory:
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Stats de progression (Mode Donjon)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS stats (
+                key TEXT PRIMARY KEY,
+                value INTEGER DEFAULT 0
+            )
+        ''')
+        cursor.execute("INSERT OR IGNORE INTO stats (key, value) VALUES ('xp', 0)")
+        cursor.execute("INSERT OR IGNORE INTO stats (key, value) VALUES ('level', 1)")
+        # Table pour les résumés de sessions
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS summaries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         self.conn.commit()
+
+    def add_xp(self, amount):
+        cursor = self.conn.cursor()
+        cursor.execute("UPDATE stats SET value = value + ? WHERE key = 'xp'", (amount,))
+        # Calcul du niveau (simplifié: lvl = sqrt(xp/100))
+        cursor.execute("SELECT value FROM stats WHERE key = 'xp'")
+        xp = cursor.fetchone()[0]
+        new_lvl = int((xp / 100) ** 0.5) + 1
+        cursor.execute("UPDATE stats SET value = ? WHERE key = 'level'", (new_lvl,))
+        self.conn.commit()
+        return xp, new_lvl
+
+    def get_stats(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT key, value FROM stats")
+        return dict(cursor.fetchall())
 
     def get_preference(self, key, default=None):
         cursor = self.conn.cursor()
@@ -76,6 +108,33 @@ class LongTermMemory:
         cursor = self.conn.cursor()
         cursor.execute("SELECT content FROM facts ORDER BY timestamp DESC")
         return [row[0] for row in cursor.fetchall()]
+
+    def search_relevant_facts(self, query, limit=5):
+        """Recherche simple par mots-clés pour simuler une mémoire sémantique."""
+        if not query: return []
+        words = [w.lower() for w in query.split() if len(w) > 3]
+        if not words: return self.get_all_facts()[:limit]
+
+        all_facts = self.get_all_facts()
+        scored_facts = []
+        for fact in all_facts:
+            score = sum(1 for word in words if word in fact.lower())
+            if score > 0:
+                scored_facts.append((score, fact))
+        
+        scored_facts.sort(key=lambda x: x[0], reverse=True)
+        return [f[1] for f in scored_facts[:limit]]
+
+    def add_summary(self, content):
+        cursor = self.conn.cursor()
+        cursor.execute("INSERT INTO summaries (content) VALUES (?)", (content,))
+        self.conn.commit()
+
+    def get_last_summary(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT content FROM summaries ORDER BY timestamp DESC LIMIT 1")
+        row = cursor.fetchone()
+        return row[0] if row else ""
 
     def close(self):
         self.conn.close()
