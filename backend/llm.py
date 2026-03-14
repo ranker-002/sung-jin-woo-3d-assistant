@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from config import (
     LLM_PROVIDER, OLLAMA_BASE_URL, OLLAMA_MODEL,
-    GEMINI_API_KEY, OPENAI_API_KEY,
+    GEMINI_API_KEY, OPENAI_API_KEY, OPENAI_MODEL,
     MAX_HISTORY_TURNS, SYSTEM_PROMPT, PERSONA_NAME
 )
 from memory import memory
@@ -49,8 +49,15 @@ def reset_history():
     _conversation_history = memory.get_recent_history(MAX_HISTORY_TURNS)
     print(f"[LLM] Historique rechargé depuis la mémoire ({len(_conversation_history)} messages).")
 
-def _process_output_tags(text: str) -> str:
-    """Analyse le texte pour extraire les faits et exécuter les actions."""
+def _process_output_tags(text: str) -> tuple[str, str]:
+    """Analyse le texte pour extraire les faits, émotions et actions."""
+    emotion = "neutral"
+    
+    # 0. Extraction de l'émotion
+    emotions_found = re.findall(r'\[EMOTION:(.*?)\]', text, re.IGNORECASE)
+    if emotions_found:
+        emotion = emotions_found[-1].strip().lower() # Prendre la dernière émotion
+        text = re.sub(r'\[EMOTION:.*?\]', '', text, flags=re.IGNORECASE)
     # 1. Enregistrement des faits
     facts = re.findall(r'\[SAVE_FACT:(.*?)\]', text)
     for f in facts:
@@ -75,7 +82,7 @@ def _process_output_tags(text: str) -> str:
         except Exception as e:
             print(f"[Action] Erreur lors de l'exécution de {act}: {e}")
 
-    return text.strip()
+    return text.strip(), emotion
 
 def _call_ollama(prompt: str) -> str:
     """Appel au modèle Ollama local."""
@@ -122,7 +129,31 @@ def _call_gemini(prompt: str) -> str:
         return response.text.strip()
     return "... Les ombres gardent le silence."
 
-def generate_response(user_input: str) -> str:
+def _call_openai(prompt: str) -> str:
+    """Appel à l'API OpenAI (similaire à riko_project)."""
+    if not OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY manquante.")
+        
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    
+    system_instr = _get_system_instructions()
+    messages = [{"role": "system", "content": system_instr}]
+    messages += _conversation_history
+    messages.append({"role": "user", "content": prompt})
+    
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=1.0,
+        top_p=1.0,
+        max_tokens=2048,
+    )
+    
+    content = response.choices[0].message.content
+    return content.strip() if content else "... Les ombres sont silencieuses."
+
+def generate_response(user_input: str) -> tuple[str, str]:
     """Génère une réponse avec mémoire et actions système."""
     global _conversation_history
 
@@ -134,8 +165,14 @@ def generate_response(user_input: str) -> str:
     memory.log_chat("user", user_input)
 
     response = ""
-    providers = [("ollama", _call_ollama), ("gemini", _call_gemini)]
-    if LLM_PROVIDER == "gemini": providers = reversed(providers)
+    providers = []
+    if LLM_PROVIDER == "openai":
+        providers = [("openai", _call_openai)]
+    elif LLM_PROVIDER == "gemini":
+        providers = [("gemini", _call_gemini)]
+    else:
+        providers = [("ollama", _call_ollama)]
+
 
     for name, fn in providers:
         try:
@@ -147,8 +184,8 @@ def generate_response(user_input: str) -> str:
     if not response:
         response = "... Les ombres sont troublées."
 
-    # Traiter les tags [SAVE_FACT] et [ACTION]
-    final_text = _process_output_tags(response)
+    # Traiter les tags [SAVE_FACT] et [ACTION] et [EMOTION]
+    final_text, emotion = _process_output_tags(response)
 
     # Log assistant response
     memory.log_chat("assistant", final_text)
@@ -158,4 +195,4 @@ def generate_response(user_input: str) -> str:
     _conversation_history.append({"role": "assistant", "content": final_text})
     _trim_history()
 
-    return final_text
+    return final_text, emotion

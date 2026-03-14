@@ -16,7 +16,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from config import (
     TTS_ENGINE, TTS_LANGUAGE,
-    ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
+    ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID,
+    SOVITS_URL, SOVITS_TEXT_LANG, SOVITS_PROMPT_LANG,
+    SOVITS_REF_AUDIO, SOVITS_PROMPT_TEXT
 )
 
 # ─── Table de mapping phonème → visème (standard 15 visèmes) ──────────────────
@@ -152,6 +154,41 @@ def _synthesize_elevenlabs(text: str) -> tuple[str, float, list[dict]]:
     return audio_b64, duration_ms, visemes
 
 
+def _synthesize_sovits(text: str) -> tuple[str, float, list[dict]]:
+    """Synthèse avec GPT-SoVITS (API de type riko_project)."""
+    import requests as req
+    payload = {
+        "text": text,
+        "text_lang": SOVITS_TEXT_LANG,
+        "ref_audio_path": SOVITS_REF_AUDIO,
+        "prompt_text": SOVITS_PROMPT_TEXT,
+        "prompt_lang": SOVITS_PROMPT_LANG
+    }
+    
+    resp = req.post(SOVITS_URL, json=payload, timeout=60)
+    resp.raise_for_status()
+    
+    audio_bytes = resp.content
+    audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    
+    duration_ms = len(text) * MS_PER_CHAR  # Fallback duration
+    try:
+        # Tenter d'estimer avec wave si possible
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(audio_bytes)
+            tmp_path = f.name
+        import wave
+        with wave.open(tmp_path, 'rb') as wav:
+            frames = wav.getnframes()
+            rate = wav.getframerate()
+            duration_ms = (frames / float(rate)) * 1000
+        os.unlink(tmp_path)
+    except Exception:
+        pass
+        
+    visemes = _simple_visemes_from_text(text, duration_ms)
+    return audio_b64, duration_ms, visemes
+
 def _synthesize_gtts(text: str) -> tuple[str, float, list[dict]]:
     """Fallback gratuit avec gTTS (nécessite internet)."""
     try:
@@ -177,7 +214,13 @@ def synthesize(text: str) -> tuple[str, float, list[dict]]:
     display_text = str(text)[:60]
     print(f"[TTS] Synthèse ({TTS_ENGINE}): {display_text}...")
     try:
-        if TTS_ENGINE == "elevenlabs" and ELEVENLABS_API_KEY:
+        if TTS_ENGINE == "sovits":
+            try:
+                return _synthesize_sovits(text)
+            except Exception as e:
+                print(f"[TTS] GPT-SoVITS échoué, fallback gTTS: {e}")
+                return _synthesize_gtts(text)
+        elif TTS_ENGINE == "elevenlabs" and ELEVENLABS_API_KEY:
             return _synthesize_elevenlabs(text)
         elif TTS_ENGINE == "coqui":
             try:

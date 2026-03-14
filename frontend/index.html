@@ -20,6 +20,10 @@
       inset: 0;
       background: transparent;
     }
+    
+    .pywebview-drag-region {
+      -webkit-app-region: drag;
+    }
 
     canvas {
       display: block;
@@ -185,6 +189,30 @@
       animation: pulse 1s infinite;
     }
 
+    #wander-btn {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      border: 1px solid rgba(109, 40, 217, 0.5);
+      background: rgba(10, 5, 30, 0.8);
+      color: rgba(200, 170, 255, 0.9);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      backdrop-filter: blur(12px);
+      font-size: 16px;
+    }
+
+    #wander-btn:hover {
+      background: rgba(109, 40, 217, 0.3);
+      box-shadow: 0 0 16px rgba(109, 40, 217, 0.4);
+    }
+    
+    #wander-btn.active {
+      background: rgba(139, 92, 246, 0.4);
+      border-color: #8b5cf6;
+      box-shadow: 0 0 16px rgba(139, 92, 246, 0.6);
+    }
+
     /* Poignée de déplacement */
     #drag-handle {
       position: absolute;
@@ -270,15 +298,27 @@
     <div class="loader-portal"></div>
     <div class="loader-text">Shadow Monarch s'éveille…</div>
   </div>
+  
+  <script>
+    // Failsafe: Si le JS met trop de temps à charger (ex: 5s), on masque le loader de force
+    setTimeout(() => {
+      const l = document.getElementById('loader');
+      if (l && !l.classList.contains('hidden')) {
+        console.warn('[Failsafe] Masquage forcé du loader.');
+        l.classList.add('hidden');
+        setTimeout(() => l.style.display = 'none', 1000);
+      }
+    }, 5000);
+  </script>
 
   <!-- Scène Three.js -->
   <div id="canvas-container"></div>
 
   <!-- UI Overlay -->
   <div id="ui-overlay">
-    <div id="drag-handle"></div>
+    <div id="drag-handle" class="pywebview-drag-region"></div>
 
-    <div id="status-bar">
+    <div id="status-bar" class="pywebview-drag-region" style="cursor: grab;">
       <div id="status-dot"></div>
       <span id="status-text">En veille</span>
     </div>
@@ -289,14 +329,18 @@
     </div>
 
     <div id="input-area">
+      <button id="wander-btn" title="Explorer le bureau">🚶</button>
       <button id="mic-btn" title="Microphone">🎤</button>
       <input id="text-input" type="text" placeholder="Parler à Sung Jin Woo…" autocomplete="off" />
       <button id="send-btn" title="Envoyer">➤</button>
     </div>
   </div>
 
+  <!-- Polyfill for importmap on older rendering engines (like PyQtWebEngine Chromium 87) -->
+  <script src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+  
   <!-- Three.js + modules ES (importmap) -->
-  <script type="importmap">
+  <script type="importmap-shim">
   {
     "imports": {
       "three":              "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
@@ -305,6 +349,6 @@
   }
   </script>
 
-  <script type="module" src="main.js"></script>
+  <script type="module-shim" src="main.js"></script>
 </body>
 </html>

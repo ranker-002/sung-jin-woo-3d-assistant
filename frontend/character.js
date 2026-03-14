@@ -82,8 +82,10 @@ export class Character {
                 });
             }
 
-            // Charger animations externes Mixamo
-            await this._loadMixamoAnimations();
+            // Charger animations externes Mixamo (non-bloquant)
+            this._loadMixamoAnimations().then(() => {
+                if (this.clips['idle']) this._playClip('idle', true);
+            });
 
             // Démarrer l'animation idle
             this._playClip('idle', true);

@@ -71,7 +71,7 @@ async def process_user_input(text: str):
     try:
         # 2. Générer la réponse LLM (bloquant → thread pool)
         loop = asyncio.get_event_loop()
-        response_text = await loop.run_in_executor(None, generate_response, text)
+        response_text, emotion = await loop.run_in_executor(None, generate_response, text)
 
         # 3. Synthèse vocale + visèmes
         await broadcast({"type": "status", "state": "speaking"})
@@ -86,6 +86,7 @@ async def process_user_input(text: str):
             "audio": audio_b64,
             "duration_ms": duration_ms,
             "visemes": visemes,
+            "emotion": emotion
         })
 
     except Exception as e:

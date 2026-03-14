@@ -19,6 +19,11 @@ let ws = null;
 let audioCtx = null;
 let currentAudioSource = null;
 
+// ─── État Balade sur le bureau ────────────────────────────────────────────────
+let isWandering = false;
+let wanderX = 50, wanderY = 100;
+let wanderSpeedX = 2;
+
 // ─── Initialisation de la scène Three.js ─────────────────────────────────────
 function initScene() {
     scene = new THREE.Scene();
@@ -176,9 +181,31 @@ function handleStatus(state, text = '') {
     }
 }
 
-async function handleSpeech({ text, audio, duration_ms, visemes }) {
+async function handleSpeech({ text, audio, duration_ms, visemes, emotion }) {
     // Afficher le texte dans la bulle
     ui?.showSpeech(text);
+    
+    // Gérer l'émotion
+    if (emotion) {
+        let hexColor = '#6600cc'; // Default: neutral/power
+        
+        switch (emotion) {
+            case 'angry':
+                hexColor = '#ff1122'; // Rouge sang
+                if (character) character._playClip('gesture1', false) || character._playClip('talking');
+                break;
+            case 'calm':
+                hexColor = '#11aaff'; // Bleu glacial
+                if (character) character._playClip('breathing', false);
+                break;
+            case 'power':
+                hexColor = '#b829ff'; // Violet intense
+                vfx?.arise(); // Déclencher l'effet arise !
+                break;
+        }
+        
+        vfx?.setThemeColor(hexColor);
+    }
 
     // Lancer le lip-sync basé sur les visèmes du serveur
     if (visemes?.length > 0) {
@@ -239,6 +266,49 @@ async function playAudio(base64Audio, durationMs) {
     }
 }
 
+// ─── Animation Déplacement sur le Bureau (Wander) ─────────────────────────────
+function toggleWander() {
+    isWandering = !isWandering;
+    const btn = document.getElementById('wander-btn');
+    if (isWandering) {
+        btn?.classList.add('active');
+        wanderX = window.screenX || 50;
+        wanderY = window.screenY || 100;
+        wanderSpeedX = 1.5; // Vitesse de marche
+        
+        if (character) character._playClip('breathing', true); // Peut être remplacé par 'walking'
+        wanderLoop();
+    } else {
+        btn?.classList.remove('active');
+        if (character) character.setState(States.IDLE);
+    }
+}
+
+function wanderLoop() {
+    if (!isWandering) return;
+    
+    wanderX += wanderSpeedX;
+    
+    const screenW = window.screen.availWidth || 1920;
+    const winW = 400; // largeur de la fenêtre PyWebView
+    
+    if (wanderX <= 0) {
+        wanderX = 0;
+        wanderSpeedX *= -1;
+        if(character && character.model) character.model.rotation.y = Math.PI; // Se retourne
+    } else if (wanderX + winW >= screenW) {
+        wanderX = screenW - winW;
+        wanderSpeedX *= -1;
+        if(character && character.model) character.model.rotation.y = 0; // Regarde devant
+    }
+    
+    if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.move_window(wanderX, wanderY);
+    }
+    
+    requestAnimationFrame(wanderLoop);
+}
+
 // ─── Point d'entrée principal ─────────────────────────────────────────────────
 async function main() {
     initScene();
@@ -247,24 +317,28 @@ async function main() {
     vfx = new VFXManager(renderer, scene, camera);
 
     // Personnage
+    // Character
     character = new Character(scene);
-    await character.load('assets/models/sung_jin_woo.glb');
-
-    // Effet 'Arise' au démarrage
-    character.arise();
-    vfx?.arise();
-
-    // Lip-sync
-    lipSync = new LipSyncController(character);
-    audioLipSync = new AudioLipSync(character);
-
+    
     // UI
     ui = new UIManager((userText) => {
         sendToServer('user_input', { text: userText });
     });
 
-    // Masquer le loader
+    // Masquer le loader IMMÉDIATEMENT
     ui.hideLoader();
+
+    // On n'attend pas toutes les animations pour afficher l'interface (lazy loading)
+    character.load('assets/models/sung_jin_woo.glb').then(() => {
+         // Effet 'Arise' au démarrage once loaded
+         character.arise();
+         vfx?.arise();
+    });
+
+
+    // Lip-sync
+    lipSync = new LipSyncController(character);
+    audioLipSync = new AudioLipSync(character);
 
     // Connexion WebSocket
     connectWebSocket();
@@ -281,7 +355,67 @@ async function main() {
     // Exposer send pour PyWebView
     window.sendToServer = sendToServer;
 
+    // Bouton de balade
+    const wanderBtn = document.getElementById('wander-btn');
+    if (wanderBtn) wanderBtn.addEventListener('click', toggleWander);
+
+    // Initialisation du déplacement manuel avec la souris
+    setupCustomDrag();
+
     console.log('[Main] Sung Jin Woo Assistant initialisé ✓');
+}
+
+// ─── Custom Window Dragging ───────────────────────────────────────────────────
+function setupCustomDrag() {
+    let isDragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    const dragElements = [
+        document.getElementById('drag-handle'),
+        document.getElementById('status-bar')
+    ];
+
+    dragElements.forEach(el => {
+        if (!el) return;
+        el.style.cursor = 'grab';
+        
+        el.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // clique gauche seulement
+            isDragging = true;
+            el.style.cursor = 'grabbing';
+            // Offset from the top-left of the window
+            offsetX = e.clientX;
+            offsetY = e.clientY;
+        });
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging && window.pywebview && window.pywebview.api) {
+            // Screen position of the mouse minus the original offsets within the window
+            const newX = e.screenX - offsetX;
+            const newY = e.screenY - offsetY;
+            
+            // Override auto-wandering state if the user manually drags
+            if (isWandering) {
+                isWandering = false;
+                document.getElementById('wander-btn')?.classList.remove('active');
+                if (character) character.setState(States.IDLE);
+            }
+            
+            window.pywebview.api.move_window(newX, newY);
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            dragElements.forEach(el => { if(el) el.style.cursor = 'grab'; });
+            // Save last pos to wanderX/Y variables so it resumes from there later
+            wanderX = window.screenX;
+            wanderY = window.screenY;
+        }
+    });
 }
 
 main().catch(console.error);

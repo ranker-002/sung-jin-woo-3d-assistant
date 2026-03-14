@@ -9,8 +9,8 @@ Un assistant virtuel 3D réaliste inspiré de **Sung Jin Woo** (Solo Leveling) q
 - 🎭 **Personnage 3D** avec animations Mixamo (idle, parler, écoute, réflexion)
 - 👄 **Lip-sync** via visèmes → morph targets (bouche synchronisée)
 - 🎤 **Écoute microphone** (faster-whisper, offline)
-- 🧠 **IA conversationnelle** (Ollama local + fallback Gemini)
-- 🎙️ **Synthèse vocale** (Coqui XTTS-v2 ou ElevenLabs)
+- 🧠 **IA conversationnelle** (OpenAI gpt-4o-mini intégré, Ollama local + fallback Gemini)
+- 🎙️ **Synthèse vocale** (GPT-SoVITS local API, Coqui XTTS-v2 ou ElevenLabs)
 - ✨ **Effets visuels** : bloom violet, particules shadow, aura magique
 - 🪟 **Fenêtre transparente** toujours au premier plan (PyWebView)
 - 🔲 **Icône barre systeme** (afficher/masquer/quitter)
@@ -127,8 +127,8 @@ sung/
 | Variable | Defaut | Description |
 |----------|--------|-------------|
 | `WHISPER_MODEL` | `small` | `tiny` (rapide) / `medium` (précis) |
-| `LLM_PROVIDER` | `ollama` | `ollama`, `gemini`, `openai` |
-| `TTS_ENGINE` | `coqui` | `coqui`, `elevenlabs`, `gtts` |
+| `LLM_PROVIDER` | `openai` | `openai`, `ollama`, `gemini` |
+| `TTS_ENGINE` | `sovits` | `sovits`, `coqui`, `elevenlabs`, `gtts` |
 | `WINDOW_X` / `Y` | `50`/`100` | Position fenêtre sur le bureau |
 
 ---

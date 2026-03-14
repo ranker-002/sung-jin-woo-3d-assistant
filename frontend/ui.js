@@ -23,7 +23,6 @@ export class UIManager {
         this.$loader = document.getElementById('loader');
 
         this._bindEvents();
-        this._setupSpeechRecognition();
 
         // Conteneur boutons (à gauche)
         const btnContainer = document.createElement('div');
@@ -47,6 +46,8 @@ export class UIManager {
         // Event listeners for new buttons
         this.micBtn.onclick = () => this._toggleMic(); // Use existing _toggleMic
         this.sysBtn.onclick = () => this.openSettings();
+        
+        this._setupSpeechRecognition();
     }
 
     _bindEvents() {

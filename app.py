@@ -32,6 +32,10 @@ class SungJinWooAPI:
         """Permet le déplacement de la fenêtre sans barre de titre."""
         pass  # PyWebView gère le drag nativement sur certaines plateformes
 
+    def move_window(self, x, y):
+        """Permet au JS de déplacer dynamiquement la fenêtre sur le bureau."""
+        self._window.move(int(x), int(y))
+
     def hide(self):
         """Cache la fenêtre."""
         self._window.hide()
@@ -90,16 +94,16 @@ def main():
         on_top        = True,         # Always-on-top
         background_color = '#000000',  # Triplet hex side-by-side with transparent=True
         shadow        = False,
-        easy_drag     = True,         # Drag via CSS drag region
+        easy_drag     = False,        # Désactivé pour éviter les crashs PyQt5 (MouseButtons error)
     )
 
     api = SungJinWooAPI(window)
-    window.expose(api.start_drag, api.hide, api.show, api.quit, api.get_version)
+    window.expose(api.start_drag, api.move_window, api.hide, api.show, api.quit, api.get_version)
 
     # 3. Lancer l'interface graphique (bloquant)
     webview.start(
         debug=os.getenv("DEBUG", "0") == "1",
-        http_server=False,
+        http_server=True,
     )
 
 
