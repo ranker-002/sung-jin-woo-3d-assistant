@@ -387,10 +387,8 @@
   </div>
 
   <!-- Polyfill for importmap on older rendering engines (like PyQtWebEngine Chromium 87) -->
-  <script src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
-  
   <!-- Three.js + modules ES (importmap) -->
-  <script type="importmap-shim">
+  <script type="importmap">
   {
     "imports": {
       "three":              "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
@@ -399,6 +397,6 @@
   }
   </script>
 
-  <script type="module-shim" src="main.js"></script>
+  <script type="module" src="main.js"></script>
 </body>
 </html>

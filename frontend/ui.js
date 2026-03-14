@@ -20,10 +20,7 @@ export class UIManager {
         this.$user = document.getElementById('user-text');
         this.$input = document.getElementById('text-input');
         this.$send = document.getElementById('send-btn');
-        this.$mic = document.getElementById('mic-btn');
         this.$loader = document.getElementById('loader');
-
-        this._bindEvents();
 
         // Conteneur boutons (à gauche)
         const btnContainer = document.createElement('div');
@@ -51,18 +48,8 @@ export class UIManager {
         btnContainer.appendChild(this.sysBtn);
         document.body.appendChild(btnContainer);
 
+        this._bindEvents();
 
-        // Event listeners for new buttons
-        this.micBtn.onclick = () => { sfx.play('click'); this._toggleMic(); };
-        this.sysBtn.onclick = () => { sfx.play('click'); this.openSettings(); };
-        
-        
-        // Add hover sounds
-        const wanderBtn = document.getElementById('wander-btn');
-        [this.micBtn, this.sysBtn, this.$send, wanderBtn].forEach(btn => {
-            if (btn) btn.addEventListener('mouseenter', () => sfx.play('hover', 0.2));
-        });
-        
         this._setupSpeechRecognition();
     }
 
@@ -82,8 +69,26 @@ export class UIManager {
             }
         });
 
-        // Microphone (original button, now potentially redundant if micBtn is used)
-        this.$mic.addEventListener('click', () => this._toggleMic());
+        // Microphone
+        if (this.micBtn) {
+            this.micBtn.onclick = () => {
+                sfx.play('click');
+                this._toggleMic();
+            }
+        }
+
+        // Settings
+        if (this.sysBtn) {
+            this.sysBtn.onclick = () => {
+                sfx.play('click');
+                this.openSettings();
+            }
+        }
+
+        // Add hover sounds
+        [this.micBtn, this.sysBtn, this.$send, this.wanderBtn].forEach(btn => {
+            if (btn) btn.addEventListener('mouseenter', () => sfx.play('hover', 0.2));
+        });
 
         // Drag fenêtre (exposé via pywebview ou CSS)
         const handle = document.getElementById('drag-handle');
@@ -108,8 +113,7 @@ export class UIManager {
     _setupSpeechRecognition() {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) {
-            this.$mic.title = 'Micro non supporté';
-            this.micBtn.title = 'Micro non supporté'; // Update new button too
+            if (this.micBtn) this.micBtn.title = 'Micro non supporté';
             return;
         }
 
@@ -124,19 +128,21 @@ export class UIManager {
                 this.$user.textContent = `🎤 ${text}`;
                 this.onUserInput(text);
             }
+            // After receiving a result, stop recognition and set status to idle
+            this._micActive = false;
+            if (this.micBtn) this.micBtn.classList.remove('active');
+            this.setStatus('idle');
         };
 
         this._recognition.onend = () => {
             this._micActive = false;
-            this.$mic.classList.remove('active');
-            this.micBtn.classList.remove('active'); // Update new button too
+            this.micBtn.classList.remove('active');
             this.setStatus('idle');
         };
 
         this._recognition.onerror = (e) => {
             console.warn('[Mic] Erreur:', e.error);
             this._micActive = false;
-            this.$mic.classList.remove('active');
             this.micBtn.classList.remove('active'); // Update new button too
         };
     }
@@ -145,8 +151,7 @@ export class UIManager {
         // Le backend gère l'écoute automatique via Wake Word.
         // Ce bouton peut servir à forcer l'état ou simplement d'indicateur.
         this._micActive = !this._micActive;
-        this.micBtn.classList.toggle('active', this._micActive);
-        this.$mic.classList.toggle('active', this._micActive);
+        if (this.micBtn) this.micBtn.classList.toggle('active', this._micActive);
         
         if (this._micActive) {
             this.setStatus('listening');
