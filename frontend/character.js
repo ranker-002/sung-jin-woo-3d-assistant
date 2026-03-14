@@ -23,6 +23,12 @@ export class Character {
         this.state = States.IDLE;
         this.morphTargets = null;  // référence aux mesh avec morph targets (bouche)
         this._clock = new THREE.Clock();
+        
+        // Procedural
+        this._breathTime = 0;
+        this._idleSwayTime = 0;
+        this._headBone = null;
+        this.targetScale = 1.0;
 
         // Poursuite du regard (LookAt)
         this.bones = { neck: null, head: null, spine: null };
@@ -40,6 +46,7 @@ export class Character {
         try {
             const gltf = await loader.loadAsync(modelPath);
             this.model = gltf.scene;
+            this.model.name = "SungJinWoo";
 
             // Configuration du modèle
             this.model.traverse(node => {
@@ -61,16 +68,34 @@ export class Character {
                 }
             });
 
-            // Centrer et positionner
+            // Centrer et positionner (pieds à 0,0,0)
             const box = new THREE.Box3().setFromObject(this.model);
-            const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
-            this.model.position.sub(center);
-            // On ne décale pas vers le bas, on garde le centre du modèle à (0,0,0)
-            // car la caméra regarde déjà vers (0, 0.5, 0)
-            this.model.scale.setScalar(1.0);
+            
+            // On veut qu'il fasse environ 1.8 - 2.0 unités de haut
+            const targetHeight = 1.8;
+            const scale = targetHeight / size.y;
+            this.targetScale = scale;
+            this.model.scale.setScalar(scale);
+            
+            // Repositionner pour que les pieds soient au sol (y=0) après scale
+            const newBox = new THREE.Box3().setFromObject(this.model);
+            const min = newBox.min;
+            this.model.position.y -= min.y;
+            this.model.position.x -= (newBox.max.x + newBox.min.x) / 2;
+            this.model.position.z -= (newBox.max.z + newBox.min.z) / 2;
 
             this.scene.add(this.model);
+            
+            // Ombre au sol (plane transparent)
+            const planeGeom = new THREE.PlaneGeometry(10, 10);
+            const planeMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+            const ground = new THREE.Mesh(planeGeom, planeMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = 0;
+            ground.receiveShadow = true;
+            this.scene.add(ground);
+
 
             // Mixer d'animations
             this.mixer = new THREE.AnimationMixer(this.model);
@@ -83,12 +108,7 @@ export class Character {
             }
 
             // Charger animations externes Mixamo (non-bloquant)
-            this._loadMixamoAnimations().then(() => {
-                if (this.clips['idle']) this._playClip('idle', true);
-            });
-
-            // Démarrer l'animation idle
-            this._playClip('idle', true);
+            this._loadMixamoAnimations();
 
             // Identifier les os pour le LookAt
             this._findBones();
@@ -117,22 +137,31 @@ export class Character {
 
         const fbxLoader = new FBXLoader();
 
-        await Promise.allSettled(animations.map(async ({ name, file }) => {
+        // Pour chaque animation, on essaie de charger le fichier
+        await Promise.all(animations.map(async ({ name, file }) => {
             try {
                 const fbx = await fbxLoader.loadAsync(`assets/animations/${file}`);
                 if (fbx.animations?.length > 0) {
                     const clip = fbx.animations[0];
                     clip.name = name;
-                    // Retarget sur notre squelette existant
-                    const action = this.mixer.clipAction(
-                        THREE.AnimationUtils.clone(clip),
-                        this.model
-                    );
+                    
+                    // RETARGETING: On nettoie les noms des tracks (ex: MixamoRig:Hips -> Hips)
+                    // car notre modèle exporté peut avoir des noms différents des FBX Mixamo originaux.
+                    clip.tracks.forEach(track => {
+                        track.name = track.name.replace(/mixamorig[0-9]* ?: ?/gi, '');
+                        track.name = track.name.replace(/[0-9a-z_]*:([a-z_])/gi, '$1'); // Plus générique
+                    });
+
+                    const action = this.mixer.clipAction(clip);
                     this.clips[name] = action;
-                    console.log(`[Character] Animation '${name}' chargée ✓`);
+                    console.log(`[Character] Animation '${name}' bindée et corrigée ✓`);
+                    
+                    if (name === 'idle' && !this.current) {
+                        this._playClip('idle', true);
+                    }
                 }
-            } catch {
-                // Animation optionnelle – pas un échec critique
+            } catch (err) {
+                console.warn(`[Character] Animation '${name}' ignorer/échec:`, err.message);
             }
         }));
     }
@@ -178,6 +207,7 @@ export class Character {
         this.scene.add(this.model);
         this.mixer = null;
         this._placeholderEyes = [eyeL, eyeR];
+        this._headBone = head; // Simuler un os pour le placeholder
         console.log('[Character] Placeholder créé ✓');
     }
 
@@ -185,12 +215,13 @@ export class Character {
     arise() {
         if (!this.model) return;
         console.log('[Character] Shadow Monarch Arise!');
-        this.model.scale.setScalar(0.01); // Presque invisible mais pas 0
-        let s = 0.01;
+        const initialS = 0.01;
+        this.model.scale.setScalar(initialS);
+        let s = initialS;
         const animateScale = () => {
-            s += 0.02;
-            if (s >= 1.0) {
-                s = 1.0;
+            s += (this.targetScale / 50); // Plus fluide
+            if (s >= this.targetScale) {
+                s = this.targetScale;
                 this.model.scale.setScalar(s);
                 this.setState(States.IDLE);
                 console.log('[Character] Personnage prêt ✓');

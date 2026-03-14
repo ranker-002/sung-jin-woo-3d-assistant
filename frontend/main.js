@@ -35,9 +35,24 @@ function initScene() {
     camera.position.set(0, 0.4, 3.5);
     camera.lookAt(0, 0.4, 0);
 
-    // Axes helper pour le debug
-    const axes = new THREE.AxesHelper(3);
-    scene.add(axes);
+    // Lights setup
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const mainLight = new THREE.DirectionalLight(0xb829ff, 1.2); // Violet de base
+    mainLight.position.set(2, 5, 5);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.set(1024, 1024);
+    scene.add(mainLight);
+
+    const rimLight = new THREE.PointLight(0x7c3aed, 2, 10);
+    rimLight.position.set(-2, 2, -2);
+    scene.add(rimLight);
+
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    fillLight.position.set(-5, 0, 5);
+    scene.add(fillLight);
+
 
     renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -56,7 +71,15 @@ function initScene() {
     document.getElementById('canvas-container').appendChild(renderer.domElement);
     clock = new THREE.Clock();
 
+    // Env Map dynamique pour les reflets (Monarch style)
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+    
+    // On peut utiliser une texture générée ou simplement le lighting de la scène
+    scene.environment = pmremGenerator.fromScene(new THREE.Scene()).texture;
+
     // Redimensionnement
+
     window.addEventListener('resize', onResize);
 
     // Suivi de la souris
