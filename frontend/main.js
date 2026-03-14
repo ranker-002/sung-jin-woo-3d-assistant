@@ -36,23 +36,16 @@ function initScene() {
     camera.lookAt(0, 0.9, 0); // Regarde vers le torse/visage
 
 
-    // Lights setup
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    // Lights setup (Simple & Neutre - les effets sont dans VFXManager)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
-    const mainLight = new THREE.DirectionalLight(0xb829ff, 1.2); // Violet de base
-    mainLight.position.set(2, 5, 5);
+    const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    mainLight.position.set(5, 5, 5);
     mainLight.castShadow = true;
     mainLight.shadow.mapSize.set(1024, 1024);
     scene.add(mainLight);
 
-    const rimLight = new THREE.PointLight(0x7c3aed, 2, 10);
-    rimLight.position.set(-2, 2, -2);
-    scene.add(rimLight);
-
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    fillLight.position.set(-5, 0, 5);
-    scene.add(fillLight);
 
 
     renderer = new THREE.WebGLRenderer({

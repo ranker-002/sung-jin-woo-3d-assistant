@@ -40,11 +40,11 @@ export class VFXManager {
         this.composer = new EffectComposer(this.renderer);
         this.composer.addPass(new RenderPass(this.scene, this.camera));
 
-        // Bloom violet pour l'aura
-        const bloom = new UnrealBloomPass(size, 1.2, 0.5, 0.0);
-        bloom.threshold = 0.0;
-        bloom.strength = 1.4;
-        bloom.radius = 0.7;
+        // Bloom subtil mais profond
+        const bloom = new UnrealBloomPass(size, 1.0, 0.4, 0.15);
+        bloom.threshold = 0.2; 
+        bloom.strength = 1.0;
+        bloom.radius = 0.8;
         this.composer.addPass(bloom);
         this._bloomPass = bloom;
 
@@ -53,90 +53,95 @@ export class VFXManager {
 
     // ── Éclairage cinématique ────────────────────────────────────────────────────
     _setupLighting() {
-        // Lumière ambiante sombre
-        const ambient = new THREE.AmbientLight(0x0a0520, 0.6);
+        // Ambiante neutre très faible
+        const ambient = new THREE.AmbientLight(0x101015, 0.4);
         this.scene.add(ambient);
 
-        // Lumière principale (bleu-violet froid)
-        const keyLight = new THREE.DirectionalLight(0x6020d0, 2.0);
-        keyLight.position.set(2, 4, 3);
-        keyLight.castShadow = true;
-        keyLight.shadow.mapSize.set(1024, 1024);
-        keyLight.shadow.camera.near = 0.1;
-        keyLight.shadow.camera.far = 20;
-        this.scene.add(keyLight);
+        // Rim Light Violette #1 (Contre-jour gauche)
+        const rim1 = new THREE.PointLight(0x7c3aed, 3.0, 10);
+        rim1.position.set(-3, 2, -2);
+        this.scene.add(rim1);
+        this._rimLights.push(rim1);
 
-        // Lumière de remplissage (violet chaud)
-        const fillLight = new THREE.PointLight(0x9333ea, 1.5, 8);
-        fillLight.position.set(-2, 1, 1);
-        this.scene.add(fillLight);
+        // Rim Light Cyan/Bleue #2 (Contre-jour droite - pour le contraste)
+        const rim2 = new THREE.PointLight(0x0ea5e9, 2.0, 10);
+        rim2.position.set(3, 3, -2);
+        this.scene.add(rim2);
+        this._rimLights.push(rim2);
 
-        // Rim light bleu glacé (contour)
-        const rimLight = new THREE.PointLight(0x1a88ff, 2.0, 6);
-        rimLight.position.set(0, 2, -3);
-        this.scene.add(rimLight);
-        this._rimLights.push(rimLight);
-
-        // Aura pulsante sous le personnage
-        this._auraLight = new THREE.PointLight(0x6600cc, 1.0, 4);
-        this._auraLight.position.set(0, -0.8, 0);
+        // Aura pulsante douce (Source de lumière venant du sol)
+        this._auraLight = new THREE.PointLight(0x8b5cf6, 2.0, 5);
+        this._auraLight.position.set(0, -0.5, 0.5);
         this.scene.add(this._auraLight);
     }
 
-    // ── Particules Shadow Monarch ────────────────────────────────────────────────
+    // ── Particules Shadow Monarch (Stylisées et fluides) ────────────────────────
     _setupParticles() {
-        const count = 200;
+        const count = 300;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(count * 3);
         const colors = new Float32Array(count * 3);
         const sizes = new Float32Array(count);
-        const speeds = new Float32Array(count);
-        const phases = new Float32Array(count);
+        
+        this._particleData = [];
 
         for (let i = 0; i < count; i++) {
-            // Cylindre autour du personnage
             const angle = Math.random() * Math.PI * 2;
-            const radius = 0.4 + Math.random() * 1.2;
-            positions[i * 3] = Math.cos(angle) * radius;
-            positions[i * 3 + 1] = (Math.random() - 0.3) * 3.0;
-            positions[i * 3 + 2] = Math.sin(angle) * radius;
+            const radius = 0.3 + Math.random() * 1.5;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            const y = (Math.random() - 0.2) * 4.0;
 
-            // Couleurs violet/bleu/blanc
-            const t = Math.random();
-            if (t < 0.5) {
-                colors[i * 3] = 0.5 + Math.random() * 0.4;  // R
-                colors[i * 3 + 1] = 0.1;                     // G
-                colors[i * 3 + 2] = 1.0;                     // B (bleu-violet)
-            } else {
-                colors[i * 3] = 0.9;   // blanc-violet
-                colors[i * 3 + 1] = 0.8;
-                colors[i * 3 + 2] = 1.0;
-            }
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
 
-            sizes[i] = 0.02 + Math.random() * 0.05;
-            speeds[i] = 0.3 + Math.random() * 0.8;
-            phases[i] = Math.random() * Math.PI * 2;
+            // Dégradé violet à bleu profond
+            const color = new THREE.Color().setHSL(0.75 + Math.random() * 0.1, 0.8, 0.5);
+            colors[i * 3] = color.r;
+            colors[i * 3 + 1] = color.g;
+            colors[i * 3 + 2] = color.b;
+
+            sizes[i] = Math.random();
+            
+            this._particleData.push({
+                speed: 0.2 + Math.random() * 0.5,
+                phase: Math.random() * Math.PI * 2,
+                radius: radius,
+                angle: angle,
+                initY: y
+            });
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-        // Shader particules avec glow
+        // Créer une texture de particule douce (glow)
+        const canvas = document.createElement('canvas');
+        canvas.width = 64; canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        grad.addColorStop(0.2, 'rgba(200, 150, 255, 0.8)');
+        grad.addColorStop(0.5, 'rgba(100, 0, 255, 0.3)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 64, 64);
+        const texture = new THREE.CanvasTexture(canvas);
+
         const material = new THREE.PointsMaterial({
-            size: 0.06,
+            size: 0.12,
+            map: texture,
             vertexColors: true,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.6,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
-            sizeAttenuation: true,
+            sizeAttenuation: true
         });
 
         this._particles = new THREE.Points(geometry, material);
-        this._particleSpeeds = speeds;
-        this._particlePhases = phases;
-        this._particleInitY = new Float32Array(positions.filter((_, i) => i % 3 === 1));
         this.scene.add(this._particles);
     }
 
@@ -154,27 +159,24 @@ export class VFXManager {
             const pos = this._particles.geometry.attributes.position;
             const count = pos.count;
             for (let i = 0; i < count; i++) {
-                const speed = this._particleSpeeds[i];
-                const phase = this._particlePhases[i];
-                const initY = this._particleInitY[i];
+                const data = this._particleData[i];
+                
+                // Mouvement ascendant cyclique
+                let y = pos.getY(i) + delta * data.speed * 0.4;
+                if (y > 3.0) y = -1.0;
+                pos.setY(i, y);
 
-                // Montée douce avec boucle
-                pos.setY(i, initY + (this._particleTime * speed * 0.3 + phase) % 3.5 - 0.5);
-                // Léger mouvement orbital
-                const angle = this._particleTime * speed * 0.1 + phase;
-                const r = Math.sqrt(pos.getX(i) ** 2 + pos.getZ(i) ** 2);
-                if (r > 0.01) {
-                    const curAngle = Math.atan2(pos.getZ(i), pos.getX(i));
-                    const na = curAngle + delta * speed * 0.15;
-                    pos.setX(i, Math.cos(na) * r);
-                    pos.setZ(i, Math.sin(na) * r);
-                }
+                // Oscillation horizontale douce
+                data.angle += delta * data.speed * 0.2;
+                const orbitR = data.radius + Math.sin(this._particleTime * 0.5 + data.phase) * 0.1;
+                pos.setX(i, Math.cos(data.angle) * orbitR);
+                pos.setZ(i, Math.sin(data.angle) * orbitR);
             }
             pos.needsUpdate = true;
 
-            // Opacité selon état
-            const targetOpacity = characterState === 'speaking' ? 0.95 : 0.6;
-            this._particles.material.opacity += (targetOpacity - this._particles.material.opacity) * delta * 2;
+            // Opacité
+            const targetOpacity = characterState === 'idle' ? 0.4 : 0.8;
+            this._particles.material.opacity += (targetOpacity - this._particles.material.opacity) * delta;
         }
 
         // Pulsation aura

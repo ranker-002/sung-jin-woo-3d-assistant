@@ -27,6 +27,8 @@ export class Character {
         // Procedural
         this._breathTime = 0;
         this._idleSwayTime = 0;
+        this._gestureTimer = 0;
+        this._nextGestureTime = 5 + Math.random() * 10;
         this._headBone = null;
         this.targetScale = 1.0;
 
@@ -271,23 +273,32 @@ export class Character {
     /** Change l'état du personnage et joue l'animation correspondante. */
     setState(newState) {
         if (this.state === newState) return;
+        const oldState = this.state;
         this.state = newState;
+
+        console.log(`[Character] State Transition: ${oldState} -> ${newState}`);
 
         switch (newState) {
             case States.IDLE:
                 this._playClip('breathing') || this._playClip('idle');
+                this._gestureTimer = 0;
+                this._nextGestureTime = 7 + Math.random() * 15;
                 break;
             case States.LISTENING:
-                this._playClip('listening') || this._playClip('idle');
+                this._playClip('listening', true, 0.2) || this._playClip('idle');
                 break;
             case States.THINKING:
-                this._playClip('thinking') || this._playClip('idle');
+                this._playClip('thinking', true, 1.0) || this._playClip('idle');
                 break;
             case States.SPEAKING:
-                this._playClip('talking') || this._playClip('gesture1') || this._playClip('idle');
+                // Choisir un clip de parole aléatoire si dispo
+                const talkClips = ['talking', 'gesture1'].filter(n => this.clips[n]);
+                const clip = talkClips[Math.floor(Math.random() * talkClips.length)] || 'idle';
+                this._playClip(clip, true, 0.3);
                 break;
         }
     }
+
 
     /**
      * Applique un visème (0-20) comme morph target.
@@ -385,19 +396,35 @@ export class Character {
         this._breathTime += delta * 0.6;
         this._idleSwayTime += delta * 0.3;
 
+        // Gestes aléatoires en IDLE pour donner vie
+        if (this.state === States.IDLE && this.mixer) {
+            this._gestureTimer += delta;
+            if (this._gestureTimer > this._nextGestureTime) {
+                const idleGestures = ['nodding', 'gesture1'].filter(n => this.clips[n]);
+                if (idleGestures.length > 0) {
+                    const g = idleGestures[Math.floor(Math.random() * idleGestures.length)];
+                    const action = this.clips[g];
+                    if (action) {
+                        console.log(`[Character] Gesturing: ${g}`);
+                        action.reset().setLoop(THREE.LoopOnce).fadeIn(0.5).play();
+                        // On ne change pas l'état, on joue juste l'animation par dessus (additive/override)
+                    }
+                }
+                this._gestureTimer = 0;
+                this._nextGestureTime = 12 + Math.random() * 20;
+            }
+        }
+
         // Respiration et flottement (bobbing)
         if (this.model) {
             const breathScale = 1.0 + Math.sin(this._breathTime) * 0.008;
-            const floatY = Math.sin(this._breathTime * 0.5) * 0.02; // Flottement léger
             
             if (this.state === States.IDLE) {
                 this.model.scale.set(this.targetScale, this.targetScale * breathScale, this.targetScale);
             }
             
-            // Appliquer le flottement vertical (en plus de la position initiale)
-            // On ne modifie pas position.y directement si on veut que les pieds restent à 0,
-            // mais pour Sung Jin Woo (Shadow), flotter un peu est stylé.
-            this.model.position.y += Math.sin(this._breathTime) * 0.0005; 
+            // Appliquer le flottement vertical (vibration ombre)
+            this.model.position.y += Math.sin(this._breathTime) * 0.0004; 
         }
 
         // Léger balancement tête
