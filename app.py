@@ -98,7 +98,15 @@ def main():
     )
 
     api = SungJinWooAPI(window)
-    window.expose(api.start_drag, api.move_window, api.hide, api.show, api.quit, api.get_version)
+    window.expose(
+        api.start_drag, 
+        api.move_window, 
+        api.hide, 
+        api.show, 
+        api.open_settings,
+        api.quit, 
+        api.get_version
+    )
 
     # 3. Lancer l'interface graphique (bloquant)
     webview.start(

@@ -213,6 +213,24 @@
       box-shadow: 0 0 16px rgba(139, 92, 246, 0.6);
     }
 
+    /* XP Float Animation */
+    .xp-float {
+        position: absolute;
+        top: 20%; right: 20px;
+        color: #8b5cf6;
+        font-weight: 800;
+        font-size: 18px;
+        pointer-events: none;
+        z-index: 500;
+        animation: xp-rise 1.5s ease-out forwards;
+        font-family: 'Rajdhani', sans-serif;
+    }
+    @keyframes xp-rise {
+        0% { transform: translateY(0); opacity: 0; }
+        20% { opacity: 1; }
+        100% { transform: translateY(-60px); opacity: 0; }
+    }
+
     /* Poignée de déplacement */
     #drag-handle {
       position: absolute;
@@ -363,8 +381,6 @@
     </div>
 
     <div id="input-area">
-      <button id="wander-btn" title="Explorer le bureau">🚶</button>
-      <button id="mic-btn" title="Microphone">🎤</button>
       <input id="text-input" type="text" placeholder="Parler à Sung Jin Woo…" autocomplete="off" />
       <button id="send-btn" title="Envoyer">➤</button>
     </div>

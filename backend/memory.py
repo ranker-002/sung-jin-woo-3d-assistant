@@ -63,14 +63,19 @@ class LongTermMemory:
 
     def add_xp(self, amount):
         cursor = self.conn.cursor()
-        cursor.execute("UPDATE stats SET value = value + ? WHERE key = 'xp'", (amount,))
-        # Calcul du niveau (simplifié: lvl = sqrt(xp/100))
         cursor.execute("SELECT value FROM stats WHERE key = 'xp'")
-        xp = cursor.fetchone()[0]
-        new_lvl = int((xp / 100) ** 0.5) + 1
+        old_xp = cursor.fetchone()[0]
+        old_lvl = int((old_xp / 100) ** 0.5) + 1
+        
+        new_xp = old_xp + amount
+        cursor.execute("UPDATE stats SET value = ? WHERE key = 'xp'", (new_xp,))
+        
+        new_lvl = int((new_xp / 100) ** 0.5) + 1
+        leveled_up = new_lvl > old_lvl
+        
         cursor.execute("UPDATE stats SET value = ? WHERE key = 'level'", (new_lvl,))
         self.conn.commit()
-        return xp, new_lvl
+        return new_xp, new_lvl, leveled_up
 
     def get_stats(self):
         cursor = self.conn.cursor()

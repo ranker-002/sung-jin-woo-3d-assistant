@@ -139,7 +139,10 @@ function handleServerMessage(msg) {
             ui?.setStatus('speaking');
             character?.setState(States.SPEAKING);
             vfx?.setThemeColor(msg.emotion || 'neutral');
-            if (msg.xp !== undefined) updateDungeonStats(msg.level, msg.xp);
+            if (msg.xp !== undefined) {
+                updateDungeonStats(msg.level, msg.xp);
+                ui?.showFloatingXP(10); // Valeur par défaut d'XP par message
+            }
             handleSpeech(msg);
             break;
 
@@ -324,7 +327,7 @@ async function playAudio(base64Audio, durationMs) {
 // ─── Animation Déplacement sur le Bureau (Wander) ─────────────────────────────
 function toggleWander() {
     isWandering = !isWandering;
-    const btn = document.getElementById('wander-btn');
+    const btn = ui?.wanderBtn;
     if (isWandering) {
         btn?.classList.add('active');
         wanderX = window.screenX || 50;
@@ -423,8 +426,7 @@ async function main() {
     window.sendToServer = sendToServer;
 
     // Bouton de balade
-    const wanderBtn = document.getElementById('wander-btn');
-    if (wanderBtn) wanderBtn.addEventListener('click', toggleWander);
+    if (ui?.wanderBtn) ui.wanderBtn.addEventListener('click', toggleWander);
 
     // Initialisation du déplacement manuel avec la souris
     setupCustomDrag();

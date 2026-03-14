@@ -33,16 +33,24 @@ export class UIManager {
           display: flex; gap: 10px;
         `;
 
-        // Bouton micro
+        // Bouton Micro
         this.micBtn = this._createBtn('🎤');
+        this.micBtn.title = 'Activer l\'écoute';
 
         // Bouton Système (Settings)
         this.sysBtn = this._createBtn('⚙️');
         this.sysBtn.title = 'Système (Paramètres)';
 
+        // Bouton Wander (Exploration)
+        this.wanderBtn = this._createBtn('🚶');
+        this.wanderBtn.id = 'wander-btn';
+        this.wanderBtn.title = 'Mode Exploration';
+
         btnContainer.appendChild(this.micBtn);
+        btnContainer.appendChild(this.wanderBtn);
         btnContainer.appendChild(this.sysBtn);
         document.body.appendChild(btnContainer);
+
 
         // Event listeners for new buttons
         this.micBtn.onclick = () => { sfx.play('click'); this._toggleMic(); };
@@ -134,15 +142,30 @@ export class UIManager {
     }
 
     _toggleMic() {
-        if (!this._recognition) return;
+        // Le backend gère l'écoute automatique via Wake Word.
+        // Ce bouton peut servir à forcer l'état ou simplement d'indicateur.
+        this._micActive = !this._micActive;
+        this.micBtn.classList.toggle('active', this._micActive);
+        this.$mic.classList.toggle('active', this._micActive);
+        
         if (this._micActive) {
-            this._recognition.stop();
-        } else {
-            this._recognition.start();
-            this._micActive = true;
-            this.$mic.classList.add('active');
             this.setStatus('listening');
+            sfx.play('click', 0.4);
+        } else {
+            this.setStatus('idle');
         }
+    }
+
+    /** Affiche une bulle d'XP flottante */
+    showFloatingXP(amount) {
+        const div = document.createElement('div');
+        div.className = 'xp-float';
+        div.textContent = `+${amount} XP`;
+        // Positionner un peu aléatoirement près de la barre d'XP
+        div.style.right = '40px';
+        div.style.top = '100px';
+        document.body.appendChild(div);
+        setTimeout(() => div.remove(), 1500);
     }
 
     // ── Statut ────────────────────────────────────────────────────────────────────

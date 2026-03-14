@@ -251,6 +251,9 @@ def generate_response(user_input: str) -> tuple[str, str]:
         _trim_history()
 
     # Gain d'XP pour le Monarque (Donjon Mode)
-    xp, level = memory.add_xp(10) # 10 XP par message
+    xp, level, leveled_up = memory.add_xp(10) # 10 XP par message
     
+    if leveled_up:
+        final_text = f"Félicitations. Tu viens de monter au niveau {level}. Continue ton ascension. [EMOTION:happy]\n\n" + final_text
+
     return final_text, emotion, xp, level
