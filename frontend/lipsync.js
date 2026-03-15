@@ -38,7 +38,7 @@ export class LipSyncController {
 
     /** Appelez chaque frame depuis la boucle principale. */
     update(delta) {
-        if (!this._active || !this._sequence.length) {
+        if (!this._active || !this._sequence || !this._sequence.length) {
             if (this._curWeight > 0.01) {
                 this.character.resetMorphTargets();
                 this._curWeight = 0;
@@ -60,7 +60,7 @@ export class LipSyncController {
         }
 
         // Fin de séquence
-        if (this._nextIdx >= this._sequence.length && elapsed > this._sequence.at(-1)?.time + 200) {
+        if (this._nextIdx >= this._sequence.length && elapsed > (this._sequence[this._sequence.length - 1]?.time || 0) + 200) {
             this.stop();
             return;
         }

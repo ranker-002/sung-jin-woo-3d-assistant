@@ -110,6 +110,7 @@ def main():
 
     # 3. Lancer l'interface graphique (bloquant)
     webview.start(
+        gui='qt',
         debug=os.getenv("DEBUG", "0") == "1",
         http_server=True,
     )

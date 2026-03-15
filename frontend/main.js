@@ -32,8 +32,8 @@ function initScene() {
 
     // Camera cinématique adaptée à la taille du personnage (1.8m)
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 1.0, 4.2); // Reculé et monté pour voir le buste
-    camera.lookAt(0, 0.9, 0); // Regarde vers le torse/visage
+    camera.position.set(0, 1.4, 4.6); // Monté pour voir plus de buste
+    camera.lookAt(0, 1.3, 0); // Regarde vers le haut (tête) pour abaisser le perso dans l'écran
 
 
     // Lights setup (Simple & Neutre - les effets sont dans VFXManager)
@@ -211,8 +211,8 @@ let idleTimer = null;
 function resetIdleTimer() {
     clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
-        if (state === 'idle') {
-            character?.setState(States.THINKING); // Utilise 'thinking' comme pose de méditation
+        if (character && character.state === States.IDLE) {
+            character.setState(States.THINKING); // Utilise 'thinking' comme pose de méditation
             vfx?.setThemeColor('thinking'); // Aura turquoise apaisante
         }
     }, 45000); // 45 secondes d'inactivité -> Méditation
@@ -408,11 +408,10 @@ function wanderLoop() {
 async function main() {
     initScene();
 
-    // VFX (must be after renderer init)
+    console.log('[Main] Initializing VFX...');
     vfx = new VFXManager(renderer, scene, camera);
 
-    // Personnage
-    // Character
+    console.log('[Main] Initializing Character...');
     character = new Character(scene);
     
     // UI
@@ -433,11 +432,15 @@ async function main() {
     
     // Reste de l'init...
     character.load('assets/models/sung_jin_woo.glb').then(() => {
+         console.log(`[Main] Character loaded with scale: ${character.model.scale.x}`);
          // Effet 'Arise' au démarrage once loaded
          character.arise();
          vfx?.arise();
          sfx.play('arise', 0.8);
+    }).catch(err => {
+         console.error('[Main] Failed to load character:', err);
     });
+
 
 
     // Lip-sync

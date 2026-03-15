@@ -18,6 +18,7 @@ import uvicorn
 from config import WS_HOST, WS_PORT, AURA_COLOR, CHARACTER_SCALE
 from tts import synthesize
 from llm import generate_response, reset_history
+from memory import memory
 
 # Pool de connexions WebSocket actives
 _active_connections: set[WebSocket] = set()

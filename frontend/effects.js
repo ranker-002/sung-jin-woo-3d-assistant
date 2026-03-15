@@ -10,6 +10,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 export class VFXManager {
     constructor(renderer, scene, camera) {
+        console.log('[VFX] Constructor start');
         this.renderer = renderer;
         this.scene = scene;
         this.camera = camera;
@@ -21,12 +22,17 @@ export class VFXManager {
         this._particleTime = 0;
 
         this._init();
+        console.log('[VFX] Constructor end');
     }
 
     _init() {
+        console.log('[VFX] Initializing PostProcessing...');
         this._setupPostProcessing();
+        console.log('[VFX] Initializing Lighting...');
         this._setupLighting();
+        console.log('[VFX] Initializing Particles...');
         this._setupParticles();
+        console.log('[VFX] Initializing GroundFog...');
         this._setupGroundFog();
     }
 
@@ -204,21 +210,20 @@ export class VFXManager {
         if (this._bloomPass) {
             this._bloomPass.strength = 6.0; // Explosion de lumière
             const decrease = setInterval(() => {
-                this._bloomPass.strength -= 0.1;
-                if (this._bloomPass.strength <= 1.4) {
-                    this._bloomPass.strength = 1.4;
+                this._bloomPass.strength -= 0.15;
+                if (this._bloomPass.strength <= 1.2) {
+                    this._bloomPass.strength = 1.2;
                     clearInterval(decrease);
                 }
             }, 30);
         }
 
-        // Booster les particules temporairement
-        if (this._particles) {
-            const oldSpeeds = new Float32Array(this._particleSpeeds);
-            for (let i = 0; i < this._particleSpeeds.length; i++) this._particleSpeeds[i] *= 10;
+        // Booster la vitesse des particules temporairement
+        if (this._particles && this._particleData) {
+            this._particleData.forEach(p => p.speed *= 8);
             setTimeout(() => {
-                this._particleSpeeds.set(oldSpeeds);
-            }, 1000);
+                this._particleData.forEach(p => p.speed /= 8);
+            }, 1200);
         }
     }
 

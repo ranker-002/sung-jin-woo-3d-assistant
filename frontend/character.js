@@ -21,7 +21,7 @@ export class Character {
         this.clips = {};        // { name: AnimationAction }
         this.current = null;
         this.state = States.IDLE;
-        this.morphTargets = null;  // référence aux mesh avec morph targets (bouche)
+        this.morphTargets = [];
         this._clock = new THREE.Clock();
         
         // Procedural
@@ -87,12 +87,16 @@ export class Character {
             // Positionnement & Échelle
             const box = new THREE.Box3().setFromObject(this.model);
             const size = box.getSize(new THREE.Vector3());
+            console.log(`[Character] Original size: ${size.x.toFixed(2)}, ${size.y.toFixed(2)}, ${size.z.toFixed(2)}`);
+            
             const targetHeight = 1.8;
             this.targetScale = targetHeight / (size.y || 1);
+            console.log(`[Character] Target scale: ${this.targetScale.toFixed(4)}`);
             this.model.scale.setScalar(this.targetScale);
             
             const newBox = new THREE.Box3().setFromObject(this.model);
-            this.model.position.y -= newBox.min.y;
+            // On déplace le modèle vers le bas (offset de -0.2)
+            this.model.position.y -= (newBox.min.y + 0.2); 
             this.model.position.x -= (newBox.max.x + newBox.min.x) / 2;
             this.model.position.z -= (newBox.max.z + newBox.min.z) / 2;
 
@@ -400,18 +404,18 @@ export class Character {
         if (this.state === States.IDLE && this.mixer) {
             this._gestureTimer += delta;
             if (this._gestureTimer > this._nextGestureTime) {
-                const idleGestures = ['nodding', 'gesture1'].filter(n => this.clips[n]);
+                // Utiliser nodding, gesture1 et thinking pour varier
+                const idleGestures = ['nodding', 'gesture1', 'thinking'].filter(n => this.clips[n]);
                 if (idleGestures.length > 0) {
                     const g = idleGestures[Math.floor(Math.random() * idleGestures.length)];
                     const action = this.clips[g];
                     if (action) {
-                        console.log(`[Character] Gesturing: ${g}`);
+                        console.log(`[Character] Random Gesture: ${g}`);
                         action.reset().setLoop(THREE.LoopOnce).fadeIn(0.5).play();
-                        // On ne change pas l'état, on joue juste l'animation par dessus (additive/override)
                     }
                 }
                 this._gestureTimer = 0;
-                this._nextGestureTime = 12 + Math.random() * 20;
+                this._nextGestureTime = 7 + Math.random() * 12; // Plus fréquent
             }
         }
 
