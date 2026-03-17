@@ -258,6 +258,38 @@ def _synthesize_gtts(text: str) -> tuple[str, float, list[dict]]:
         return "", 0, []
 
 
+def prewarm():
+    """
+    Pre-loads the configured TTS engine at startup to reduce first-call latency.
+    Safe to call multiple times; will only load once.
+    """
+    print("[TTS] Pré-chargement du moteur...")
+    try:
+        if TTS_ENGINE == "coqui":
+            model = _get_coqui()
+            if model is False:
+                print("[TTS] Coqui indisponible, fallback sur gTTS")
+        elif TTS_ENGINE == "piper":
+            # Piper preloads on first synthesis, but we can trigger it early
+            # by calling a dummy synthesis with empty text
+            try:
+                _synthesize_piper("")  # Will init if needed, returns empty
+            except:
+                pass
+        elif TTS_ENGINE == "sovits":
+            # SoVITS is stateless, no prewarm needed
+            pass
+        elif TTS_ENGINE == "elevenlabs":
+            # API-based, no prewarm needed
+            pass
+        else:
+            # gTTS fallback - no prewarm needed
+            pass
+        print("[TTS] Pré-chargement terminé ✓")
+    except Exception as e:
+        print(f"[TTS] Erreur lors du pré-chargement: {e}")
+
+
 def synthesize(text: str) -> tuple[str, float, list[dict]]:
     """
     Point d'entrée principal TTS.

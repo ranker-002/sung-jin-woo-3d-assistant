@@ -8,8 +8,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path("backend/data/memory.db")
-DB_PATH.parent.mkdir(exist_ok=True)
+DB_PATH = Path(__file__).parent / "data" / "memory.db"
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 class LongTermMemory:
     def __init__(self):

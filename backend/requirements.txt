@@ -5,7 +5,7 @@ faster-whisper==1.0.3
 sounddevice==0.5.0
 numpy>=1.26.4
 TTS==0.22.0
-pywebview==5.3
+pywebview==6.1
 pystray==0.19.5
 pillow==10.4.0
 google-generativeai==0.8.3
@@ -17,3 +17,4 @@ pvporcupine==3.0.0
 openai>=1.0.0
 piper-tts==1.4.1
 PyYAML==6.0.2
+psutil>=5.9.0

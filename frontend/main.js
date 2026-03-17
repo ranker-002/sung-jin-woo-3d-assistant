@@ -20,6 +20,14 @@ let ws = null;
 let audioCtx = null;
 let currentAudioSource = null;
 
+// WebSocket reconnection state
+let wsReconnectAttempts = 0;
+let wsReconnectTimeout = null;
+const WS_MAX_RECONNECT_DELAY = 30000; // 30s max
+const WS_INITIAL_RECONNECT_DELAY = 1000; // 1s initial
+const WS_BACKOFF_FACTOR = 1.5;
+const WS_JITTER = 0.3; // ±30% jitter
+
 // ─── État Balade sur le bureau ────────────────────────────────────────────────
 let isWandering = false;
 let wanderX = 50, wanderY = 100;
@@ -117,10 +125,18 @@ function animate() {
 
 // ─── WebSocket – connexion et gestion messages ────────────────────────────────
 function connectWebSocket() {
+    // Clear any pending reconnect
+    if (wsReconnectTimeout) {
+        clearTimeout(wsReconnectTimeout);
+        wsReconnectTimeout = null;
+    }
+
     ws = new WebSocket(WS_URL);
 
     ws.addEventListener('open', () => {
         console.log('[WS] Connecté au serveur ✓');
+        wsReconnectAttempts = 0; // Reset counter on successful connection
+        ui?.setStatus?.('idle'); // Clear any disconnected state
     });
 
     ws.addEventListener('message', ({ data }) => {
@@ -129,13 +145,38 @@ function connectWebSocket() {
         handleServerMessage(msg);
     });
 
-    ws.addEventListener('close', () => {
-        console.warn('[WS] Déconnecté. Reconnexion dans', WS_RETRY_DELAY, 'ms...');
-        setTimeout(connectWebSocket, WS_RETRY_DELAY);
+    ws.addEventListener('close', (event) => {
+        console.warn('[WS] Déconnecté. Code:', event.code, 'Raison:', event.reason);
+
+        // Don't reconnect if close was clean (code 1000) - user-initiated
+        if (event.code === 1000) {
+            console.log('[WS] Fermeture propre, pas de reconnexion');
+            return;
+        }
+
+        // Exponential backoff with jitter
+        const delay = Math.min(
+            WS_INITIAL_RECONNECT_DELAY * Math.pow(WS_BACKOFF_FACTOR, wsReconnectAttempts) +
+            (Math.random() - 0.5) * WS_JITTER * 1000,
+            WS_MAX_RECONNECT_DELAY
+        );
+
+        wsReconnectAttempts++;
+        console.log(`[WS] Reconnexion tentative ${wsReconnectAttempts} dans ${Math.round(delay)}ms`);
+
+        // Update UI to show reconnecting state after a few attempts
+        if (wsReconnectAttempts > 2) {
+            ui?.setStatus?.('thinking'); // Show thinking state as "reconnecting"
+        }
+
+        wsReconnectTimeout = setTimeout(() => {
+            connectWebSocket();
+        }, delay);
     });
 
     ws.addEventListener('error', (e) => {
-        console.error('[WS] Erreur:', e);
+        console.error('[WS] Erreur WebSocket:', e);
+        // Error event fires before close, so close handler will handle reconnection
     });
 }
 
@@ -176,6 +217,8 @@ function handleServerMessage(msg) {
             console.error('[Server] Erreur:', msg.message);
             character?.setState(States.IDLE);
             ui?.setStatus('idle');
+            // Show error to user
+            ui?.showError?.(msg.message || "Erreur serveur inconnue");
             break;
 
         case 'pong':

@@ -173,6 +173,55 @@ export class UIManager {
         setTimeout(() => div.remove(), 1500);
     }
 
+    /** Affiche une notification d'erreur (toast) */
+    showError(message, duration = 5000) {
+        const toast = document.createElement('div');
+        toast.className = 'error-toast';
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(220, 38, 38, 0.9);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            max-width: 300px;
+            text-align: center;
+            z-index: 2000;
+            box-shadow: 0 4px 20px rgba(220, 38, 38, 0.4);
+            backdrop-filter: blur(10px);
+            animation: slide-in 0.3s ease-out;
+        `;
+
+        // Add animation keyframes if not already present
+        if (!document.getElementById('error-toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'error-toast-styles';
+            style.textContent = `
+                @keyframes slide-in {
+                    from { opacity: 0; transform: translate(-50%, -20px); }
+                    to { opacity: 1; transform: translate(-50%, 0); }
+                }
+                @keyframes fade-out {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        document.body.appendChild(toast);
+
+        // Auto-remove after duration
+        setTimeout(() => {
+            toast.style.animation = 'fade-out 0.3s ease-out forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    }
+
     // ── Statut ────────────────────────────────────────────────────────────────────
     setStatus(state) {
         this._state = state;

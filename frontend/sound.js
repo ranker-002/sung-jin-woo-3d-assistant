@@ -7,6 +7,7 @@ export class SoundManager {
         this.sounds = {};
         this.enabled = true;
         this.initialized = false;
+        this._missingSounds = new Set();
         this._init();
     }
 
@@ -21,9 +22,27 @@ export class SoundManager {
             'notification': 'notif_ding.mp3'
         };
 
+        // Check which files exist, create silent fallbacks for missing ones
         for (const [name, file] of Object.entries(manifest)) {
-            const audio = new Audio(`assets/audio/${file}`);
+            const path = `assets/audio/${file}`;
+
+            // Create an Audio element but it may fail to load if file missing
+            const audio = new Audio();
             audio.volume = 0.5;
+            audio.preload = 'none';
+
+            // Check if file exists by trying to load and catching error
+            // We'll lazily check on first play
+            audio.addEventListener('error', (e) => {
+                if (!this._missingSounds.has(name)) {
+                    console.warn(`[Sound] Fichier audio manquant: ${path}`);
+                    this._missingSounds.add(name);
+                }
+            });
+
+            // Set source but don't trigger load yet
+            audio.src = path;
+
             this.sounds[name] = audio;
         }
     }
@@ -36,16 +55,32 @@ export class SoundManager {
     }
 
     play(name, volume = 0.5) {
-        if (!this.enabled || !this.sounds[name]) return;
-        
+        if (!this.enabled) return;
+        const original = this.sounds[name];
+        if (!original) {
+            // Only log once per missing sound
+            if (!this._missingSounds?.has(name)) {
+                console.warn(`[Sound] Son non configuré: ${name}`);
+            }
+            return;
+        }
+
+        // If we already know this sound is missing, skip
+        if (this._missingSounds.has(name)) return;
+
         try {
-            const sound = this.sounds[name].cloneNode();
+            const sound = original.cloneNode();
             sound.volume = volume;
-            sound.play().catch(() => {
-                // Silencieux si l'utilisateur n'a pas encore cliqué
+            sound.play().catch((err) => {
+                // Log missing file only once
+                if (!this._missingSounds.has(name)) {
+                    console.warn(`[Sound] Impossible de lire '${name}': ${err.message}`);
+                    this._missingSounds.add(name);
+                }
             });
         } catch (e) {
             console.warn(`[Sound] Erreur lecture ${name}:`, e);
+            this._missingSounds.add(name);
         }
     }
 

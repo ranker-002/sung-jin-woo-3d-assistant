@@ -6,6 +6,8 @@ import subprocess
 import webbrowser
 import os
 import sys
+import shlex
+from pathlib import Path
 from typing import Generator
 
 # Assurer l'accès aux modules locaux
@@ -14,9 +16,76 @@ sys.path.insert(0, os.path.dirname(__file__))
 from config import (
     LLM_PROVIDER, OLLAMA_BASE_URL, OLLAMA_MODEL,
     GEMINI_API_KEY, OPENAI_API_KEY, OPENAI_MODEL,
-    MAX_HISTORY_TURNS, SYSTEM_PROMPT, PERSONA_NAME
+    MAX_HISTORY_TURNS, SYSTEM_PROMPT, PERSONA_NAME,
+    ALLOWED_COMMANDS, DANGEROUS_COMMANDS
 )
 from memory import memory
+
+def _validate_command(command: str) -> tuple[bool, str]:
+    """
+    Validate a command for execution.
+    Returns (is_valid, error_message).
+    """
+    if not command:
+        return False, "Empty command"
+
+    # Parse command safely (no shell expansion)
+    try:
+        parts = shlex.split(command)
+    except ValueError as e:
+        return False, f"Invalid command syntax: {e}"
+
+    if not parts:
+        return False, "No command parts parsed"
+
+    cmd_name = Path(parts[0]).name.lower().strip()
+
+    # Check against whitelist (from config)
+    if cmd_name not in ALLOWED_COMMANDS:
+        return False, f"Command '{cmd_name}' not authorized. Add to ALLOWED_COMMANDS in config to enable."
+
+    # Check for shell metacharacters (shouldn't exist if using shlex, but double-check)
+    dangerous_chars = [';', '|', '&', '>', '<', '`', '$', '(', ')', '{', '}', '[', ']']
+    if any(char in command for char in dangerous_chars):
+        return False, "Command contains shell metacharacters"
+
+    # Check if requires confirmation (not implemented yet, block for now)
+    if cmd_name in DANGEROUS_COMMANDS:
+        return False, f"Command '{cmd_name}' is considered dangerous and requires user confirmation (not auto-executed)"
+
+    return True, "OK"
+
+def _execute_command_safely(command: str) -> tuple[bool, str]:
+    """
+    Execute a command after validation.
+    Returns (success, output/error).
+    """
+    # Validate first
+    is_valid, msg = _validate_command(command)
+    if not is_valid:
+        return False, f"[SECURITY] Command blocked: {msg}"
+
+    try:
+        # Use Popen with list, no shell=True
+        parts = shlex.split(command)
+        proc = subprocess.Popen(
+            parts,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            shell=False  # CRITICAL: Never use shell=True
+        )
+        stdout, stderr = proc.communicate(timeout=10)
+
+        if proc.returncode == 0:
+            return True, stdout.strip() if stdout else "Command executed"
+        else:
+            return False, f"Command failed (code {proc.returncode}): {stderr.strip()}"
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return False, "Command timed out after 10 seconds"
+    except Exception as e:
+        return False, f"Execution error: {e}"
 
 # Historique conversationnel chargé depuis la mémoire
 _conversation_history: list[dict] = []
@@ -136,24 +205,74 @@ def _process_output_tags(text: str) -> tuple[str, str]:
                 cmd_type, val = act.split("|", 1)
                 val = val.strip()
                 if cmd_type == "OPEN_URL":
+                    # Validate URL (basic check)
+                    if not val.startswith(('http://', 'https://')):
+                        val = 'https://' + val
                     webbrowser.open(val)
                     print(f"[Action] Ouverture URL: {val}")
                 elif cmd_type == "EXEC":
-                    subprocess.Popen(val, shell=True)
-                    print(f"[Action] Exécution commande: {val}")
+                    # SECURE: Use whitelist validation, no shell=True
+                    success, output = _execute_command_safely(val)
+                    if success:
+                        print(f"[Action] EXEC OK: {val} → {output}")
+                        if output:
+                            text = text + f"\n[INFO SYSTEME: {output}]"
+                    else:
+                        print(f"[Action] EXEC BLOCKED: {val} → {output}")
+                        text = text + f"\n[INFO SYSTEME: Action non autorisée: {output}]"
                 elif cmd_type == "VOL":
-                    sign = val[0]
-                    amount = val[1:]
-                    cmd = f"pactl set-sink-volume @DEFAULT_SINK@ {sign}{amount}%"
-                    subprocess.run(cmd, shell=True)
-                    print(f"[Action] Volume: {val}")
+                    # SECURITY: Validate volume format before executing
+                    if re.match(r'^[+-]\d{1,3}%?$', val):
+                        amount = val.rstrip('%')
+                        # Cross-platform volume control attempt
+                        try:
+                            if sys.platform == 'linux':
+                                # Try PulseAudio (pactl)
+                                cmd = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{amount}%"]
+                            elif sys.platform == 'darwin':
+                                # macOS
+                                cmd = ["osascript", "-e", f"set volume output volume {amount}"]
+                            elif sys.platform == 'win32':
+                                # Windows (requires nircmd or similar)
+                                print("[Action] VOL: Not implemented on Windows without nircmd")
+                                cmd = None
+                            else:
+                                cmd = None
+
+                            if cmd:
+                                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                                if result.returncode == 0:
+                                    print(f"[Action] Volume: {val}")
+                                else:
+                                    print(f"[Action] VOL error: {result.stderr}")
+                        except Exception as e:
+                            print(f"[Action] VOL failed: {e}")
+                    else:
+                        print(f"[Action] VOL format invalid: {val}")
                 elif cmd_type == "WEATHER":
-                    resp = requests.get(f"https://wttr.in/{val}?format=3")
-                    if resp.status_code == 200:
-                        text = text + f"\n[INFO SYSTEME: La météo à {val} est {resp.text.strip()}]"
+                    # Validate city name (alphanumeric, spaces, hyphens only)
+                    if re.match(r'^[a-zA-Z0-9\s\-]+$', val) and len(val) <= 50:
+                        try:
+                            resp = requests.get(f"https://wttr.in/{val}?format=3", timeout=10)
+                            if resp.status_code == 200:
+                                weather_text = resp.text.strip()
+                                text = text + f"\n[INFO SYSTEME: La météo à {val} est {weather_text}]"
+                            else:
+                                text = text + f"\n[INFO SYSTEME: Impossible d'obtenir la météo pour {val}]"
+                        except requests.RequestException as e:
+                            text = text + f"\n[INFO SYSTEME: Erreur réseau météo: {e}]"
+                    else:
+                        print(f"[Action] WEATHER invalid city: {val}")
                 elif cmd_type == "SYS_INFO":
-                    # Simulation simplifiée info sys
-                    text = text + "\n[INFO SYSTEME: CPU: 12%, RAM: 4.2GB/16GB, Système Stable]"
+                    # Platform-agnostic system info (no shell)
+                    try:
+                        import psutil
+                        cpu = psutil.cpu_percent(interval=0.5)
+                        ram = psutil.virtual_memory()
+                        info = f"CPU: {cpu}%, RAM: {ram.used/1e9:.1f}GB/{ram.total/1e9:.1f}GB, Charge: {psutil.getloadavg()[0]:.1f}"
+                    except ImportError:
+                        info = "System info non disponible (psutil requis)"
+                    text = text + f"\n[INFO SYSTEME: {info}]"
             text = text.replace(f"[ACTION:{act}]", "")
         except Exception as e:
             print(f"[Action] Erreur lors de l'exécution de {act}: {e}")

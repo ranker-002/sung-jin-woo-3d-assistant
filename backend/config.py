@@ -73,6 +73,21 @@ if _yaml_path.exists():
     except Exception as e:
         print(f"[Config] Erreur lecture character.yaml: {e}")
 
+# ─── Security: Allowed EXEC Commands ───────────────────────────────────────────
+# Space-separated list of allowed executable names for [ACTION:EXEC|...]
+# Only commands in this whitelist can be executed (prevents arbitrary code execution)
+ALLOWED_COMMANDS = os.getenv(
+    "ALLOWED_COMMANDS",
+    "spotify firefox chrome calculator terminal filemanager texteditor vlc systemsettings"
+).lower().split()
+
+# Commands that require explicit user confirmation (not auto-executed)
+# These will be logged but denied unless user approves (future feature)
+DANGEROUS_COMMANDS = os.getenv(
+    "DANGEROUS_COMMANDS",
+    "rm mv cp dd shutdown reboot poweroff su sudo passwd format mkfs fdisk"
+).lower().split()
+
 # Overrides .env fallback 
 AURA_COLOR = os.getenv("AURA_COLOR", AURA_COLOR)
 CHARACTER_SCALE = float(os.getenv("CHARACTER_SCALE", CHARACTER_SCALE))
