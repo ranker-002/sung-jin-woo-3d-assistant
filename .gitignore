@@ -22,5 +22,12 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+# Databases
+backend/data/*.db
+
+# Development References
+riko_project_reference/
+.rax-flow/
+
 *.swp
 *.bak

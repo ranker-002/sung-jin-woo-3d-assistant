@@ -9,8 +9,8 @@ Un assistant virtuel 3D réaliste inspiré de **Sung Jin Woo** (Solo Leveling) q
 - 🎭 **Personnage 3D** avec animations Mixamo (idle, parler, écoute, réflexion)
 - 👄 **Lip-sync** via visèmes → morph targets (bouche synchronisée)
 - 🎤 **Écoute microphone** (faster-whisper, offline)
-- 🧠 **IA conversationnelle** (Ollama local + fallback Gemini)
-- 🎙️ **Synthèse vocale** (Coqui XTTS-v2 ou ElevenLabs)
+- 🧠 **IA conversationnelle** (OpenAI gpt-4o-mini intégré, Ollama local + fallback Gemini)
+- 🎙️ **Synthèse vocale** (GPT-SoVITS local API, Coqui XTTS-v2 ou ElevenLabs)
 - ✨ **Effets visuels** : bloom violet, particules shadow, aura magique
 - 🪟 **Fenêtre transparente** toujours au premier plan (PyWebView)
 - 🔲 **Icône barre systeme** (afficher/masquer/quitter)
@@ -124,12 +124,28 @@ sung/
 
 ## 🔧 Configuration avancée
 
-| Variable | Defaut | Description |
-|----------|--------|-------------|
 | `WHISPER_MODEL` | `small` | `tiny` (rapide) / `medium` (précis) |
-| `LLM_PROVIDER` | `ollama` | `ollama`, `gemini`, `openai` |
-| `TTS_ENGINE` | `coqui` | `coqui`, `elevenlabs`, `gtts` |
+| `LLM_PROVIDER` | `ollama` | `openai`, `ollama`, `gemini` |
+| `TTS_ENGINE` | `coqui` | `sovits`, `coqui`, `elevenlabs`, `piper`, `gtts` |
 | `WINDOW_X` / `Y` | `50`/`100` | Position fenêtre sur le bureau |
+
+---
+
+## 🦅 Version 100% Gratuite & Locale (Air Gap Ready)
+
+Pour faire tourner Sung Jin Woo sans aucune clé API et sans envoyer vos données sur le cloud :
+
+1. **LLM local** : Installez [Ollama](https://ollama.com) et lancez le modèle : `ollama run mistral` (ou `llama3`).
+2. **STT local** : Déjà intégré via `faster-whisper`.
+3. **TTS local** : 
+   - **Coqui** (recommandé pour la qualité) : `TTS_ENGINE=coqui` dans `.env`.
+   - **Piper** (recommandé pour la vitesse) : `TTS_ENGINE=piper` dans `.env`.
+4. **Configuration `.env`** :
+   ```bash
+   LLM_PROVIDER=ollama
+   OLLAMA_MODEL=mistral
+   TTS_ENGINE=coqui
+   ```
 
 ---
 

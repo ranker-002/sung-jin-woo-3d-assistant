@@ -2,6 +2,7 @@
  * ui.js – Gestionnaire UI et WebSocket
  * Gère : statut, bulles de dialogue, saisie texte, microphone navigateur.
  */
+import { sfx } from './sound.js';
 
 export class UIManager {
     constructor(onUserInput) {
@@ -19,11 +20,7 @@ export class UIManager {
         this.$user = document.getElementById('user-text');
         this.$input = document.getElementById('text-input');
         this.$send = document.getElementById('send-btn');
-        this.$mic = document.getElementById('mic-btn');
         this.$loader = document.getElementById('loader');
-
-        this._bindEvents();
-        this._setupSpeechRecognition();
 
         // Conteneur boutons (à gauche)
         const btnContainer = document.createElement('div');
@@ -33,36 +30,65 @@ export class UIManager {
           display: flex; gap: 10px;
         `;
 
-        // Bouton micro
+        // Bouton Micro
         this.micBtn = this._createBtn('🎤');
+        this.micBtn.title = 'Activer l\'écoute';
 
         // Bouton Système (Settings)
         this.sysBtn = this._createBtn('⚙️');
         this.sysBtn.title = 'Système (Paramètres)';
 
+        // Bouton Wander (Exploration)
+        this.wanderBtn = this._createBtn('🚶');
+        this.wanderBtn.id = 'wander-btn';
+        this.wanderBtn.title = 'Mode Exploration';
+
         btnContainer.appendChild(this.micBtn);
+        btnContainer.appendChild(this.wanderBtn);
         btnContainer.appendChild(this.sysBtn);
         document.body.appendChild(btnContainer);
 
-        // Event listeners for new buttons
-        this.micBtn.onclick = () => this._toggleMic(); // Use existing _toggleMic
-        this.sysBtn.onclick = () => this.openSettings();
+        this._bindEvents();
+
+        this._setupSpeechRecognition();
     }
 
     _bindEvents() {
         // Envoi par bouton
-        this.$send.addEventListener('click', () => this._submitInput());
+        this.$send.addEventListener('click', () => {
+            sfx.play('click');
+            this._submitInput();
+        });
 
         // Envoi par Entrée
         this.$input.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+                sfx.play('click');
                 this._submitInput();
             }
         });
 
-        // Microphone (original button, now potentially redundant if micBtn is used)
-        this.$mic.addEventListener('click', () => this._toggleMic());
+        // Microphone
+        if (this.micBtn) {
+            this.micBtn.onclick = () => {
+                sfx.play('click');
+                this._toggleMic();
+            }
+        }
+
+        // Settings
+        if (this.sysBtn) {
+            this.sysBtn.onclick = () => {
+                sfx.play('click');
+                this.openSettings();
+            }
+        }
+
+        // Add hover sounds
+        [this.micBtn, this.sysBtn, this.$send, this.wanderBtn].forEach(btn => {
+            if (btn) btn.addEventListener('mouseenter', () => sfx.play('hover', 0.2));
+        });
 
         // Drag fenêtre (exposé via pywebview ou CSS)
         const handle = document.getElementById('drag-handle');
@@ -87,8 +113,7 @@ export class UIManager {
     _setupSpeechRecognition() {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) {
-            this.$mic.title = 'Micro non supporté';
-            this.micBtn.title = 'Micro non supporté'; // Update new button too
+            if (this.micBtn) this.micBtn.title = 'Micro non supporté';
             return;
         }
 
@@ -103,33 +128,98 @@ export class UIManager {
                 this.$user.textContent = `🎤 ${text}`;
                 this.onUserInput(text);
             }
+            // After receiving a result, stop recognition and set status to idle
+            this._micActive = false;
+            if (this.micBtn) this.micBtn.classList.remove('active');
+            this.setStatus('idle');
         };
 
         this._recognition.onend = () => {
             this._micActive = false;
-            this.$mic.classList.remove('active');
-            this.micBtn.classList.remove('active'); // Update new button too
+            this.micBtn.classList.remove('active');
             this.setStatus('idle');
         };
 
         this._recognition.onerror = (e) => {
             console.warn('[Mic] Erreur:', e.error);
             this._micActive = false;
-            this.$mic.classList.remove('active');
             this.micBtn.classList.remove('active'); // Update new button too
         };
     }
 
     _toggleMic() {
-        if (!this._recognition) return;
+        // Le backend gère l'écoute automatique via Wake Word.
+        // Ce bouton peut servir à forcer l'état ou simplement d'indicateur.
+        this._micActive = !this._micActive;
+        if (this.micBtn) this.micBtn.classList.toggle('active', this._micActive);
+        
         if (this._micActive) {
-            this._recognition.stop();
-        } else {
-            this._recognition.start();
-            this._micActive = true;
-            this.$mic.classList.add('active');
             this.setStatus('listening');
+            sfx.play('click', 0.4);
+        } else {
+            this.setStatus('idle');
         }
+    }
+
+    /** Affiche une bulle d'XP flottante */
+    showFloatingXP(amount) {
+        const div = document.createElement('div');
+        div.className = 'xp-float';
+        div.textContent = `+${amount} XP`;
+        // Positionner un peu aléatoirement près de la barre d'XP
+        div.style.right = '40px';
+        div.style.top = '100px';
+        document.body.appendChild(div);
+        setTimeout(() => div.remove(), 1500);
+    }
+
+    /** Affiche une notification d'erreur (toast) */
+    showError(message, duration = 5000) {
+        const toast = document.createElement('div');
+        toast.className = 'error-toast';
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(220, 38, 38, 0.9);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            max-width: 300px;
+            text-align: center;
+            z-index: 2000;
+            box-shadow: 0 4px 20px rgba(220, 38, 38, 0.4);
+            backdrop-filter: blur(10px);
+            animation: slide-in 0.3s ease-out;
+        `;
+
+        // Add animation keyframes if not already present
+        if (!document.getElementById('error-toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'error-toast-styles';
+            style.textContent = `
+                @keyframes slide-in {
+                    from { opacity: 0; transform: translate(-50%, -20px); }
+                    to { opacity: 1; transform: translate(-50%, 0); }
+                }
+                @keyframes fade-out {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        document.body.appendChild(toast);
+
+        // Auto-remove after duration
+        setTimeout(() => {
+            toast.style.animation = 'fade-out 0.3s ease-out forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
     }
 
     // ── Statut ────────────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import { Character, States } from './character.js';
 import { LipSyncController, AudioLipSync } from './lipsync.js';
 import { VFXManager } from './effects.js';
 import { UIManager } from './ui.js';
+import { sfx } from './sound.js';
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 const WS_URL = 'ws://localhost:8765/ws';
@@ -19,19 +20,41 @@ let ws = null;
 let audioCtx = null;
 let currentAudioSource = null;
 
+// WebSocket reconnection state
+let wsReconnectAttempts = 0;
+let wsReconnectTimeout = null;
+const WS_MAX_RECONNECT_DELAY = 30000; // 30s max
+const WS_INITIAL_RECONNECT_DELAY = 1000; // 1s initial
+const WS_BACKOFF_FACTOR = 1.5;
+const WS_JITTER = 0.3; // ±30% jitter
+
+// ─── État Balade sur le bureau ────────────────────────────────────────────────
+let isWandering = false;
+let wanderX = 50, wanderY = 100;
+let wanderSpeedX = 2;
+
 // ─── Initialisation de la scène Three.js ─────────────────────────────────────
 function initScene() {
     scene = new THREE.Scene();
     scene.background = null; // Transparent !
 
-    // Camera légèrement en dessous du niveau des yeux pour vue cinématique
+    // Camera cinématique adaptée à la taille du personnage (1.8m)
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 0.4, 3.5);
-    camera.lookAt(0, 0.4, 0);
+    camera.position.set(0, 1.4, 4.6); // Monté pour voir plus de buste
+    camera.lookAt(0, 1.3, 0); // Regarde vers le haut (tête) pour abaisser le perso dans l'écran
 
-    // Axes helper pour le debug
-    const axes = new THREE.AxesHelper(3);
-    scene.add(axes);
+
+    // Lights setup (Simple & Neutre - les effets sont dans VFXManager)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    const mainLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    mainLight.position.set(5, 5, 5);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.set(1024, 1024);
+    scene.add(mainLight);
+
+
 
     renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -50,7 +73,15 @@ function initScene() {
     document.getElementById('canvas-container').appendChild(renderer.domElement);
     clock = new THREE.Clock();
 
+    // Env Map dynamique pour les reflets (Monarch style)
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+    
+    // On peut utiliser une texture générée ou simplement le lighting de la scène
+    scene.environment = pmremGenerator.fromScene(new THREE.Scene()).texture;
+
     // Redimensionnement
+
     window.addEventListener('resize', onResize);
 
     // Suivi de la souris
@@ -94,10 +125,18 @@ function animate() {
 
 // ─── WebSocket – connexion et gestion messages ────────────────────────────────
 function connectWebSocket() {
+    // Clear any pending reconnect
+    if (wsReconnectTimeout) {
+        clearTimeout(wsReconnectTimeout);
+        wsReconnectTimeout = null;
+    }
+
     ws = new WebSocket(WS_URL);
 
     ws.addEventListener('open', () => {
         console.log('[WS] Connecté au serveur ✓');
+        wsReconnectAttempts = 0; // Reset counter on successful connection
+        ui?.setStatus?.('idle'); // Clear any disconnected state
     });
 
     ws.addEventListener('message', ({ data }) => {
@@ -106,13 +145,38 @@ function connectWebSocket() {
         handleServerMessage(msg);
     });
 
-    ws.addEventListener('close', () => {
-        console.warn('[WS] Déconnecté. Reconnexion dans', WS_RETRY_DELAY, 'ms...');
-        setTimeout(connectWebSocket, WS_RETRY_DELAY);
+    ws.addEventListener('close', (event) => {
+        console.warn('[WS] Déconnecté. Code:', event.code, 'Raison:', event.reason);
+
+        // Don't reconnect if close was clean (code 1000) - user-initiated
+        if (event.code === 1000) {
+            console.log('[WS] Fermeture propre, pas de reconnexion');
+            return;
+        }
+
+        // Exponential backoff with jitter
+        const delay = Math.min(
+            WS_INITIAL_RECONNECT_DELAY * Math.pow(WS_BACKOFF_FACTOR, wsReconnectAttempts) +
+            (Math.random() - 0.5) * WS_JITTER * 1000,
+            WS_MAX_RECONNECT_DELAY
+        );
+
+        wsReconnectAttempts++;
+        console.log(`[WS] Reconnexion tentative ${wsReconnectAttempts} dans ${Math.round(delay)}ms`);
+
+        // Update UI to show reconnecting state after a few attempts
+        if (wsReconnectAttempts > 2) {
+            ui?.setStatus?.('thinking'); // Show thinking state as "reconnecting"
+        }
+
+        wsReconnectTimeout = setTimeout(() => {
+            connectWebSocket();
+        }, delay);
     });
 
     ws.addEventListener('error', (e) => {
-        console.error('[WS] Erreur:', e);
+        console.error('[WS] Erreur WebSocket:', e);
+        // Error event fires before close, so close handler will handle reconnection
     });
 }
 
@@ -127,31 +191,108 @@ function handleServerMessage(msg) {
     switch (msg.type) {
         case 'status':
             handleStatus(msg.state, msg.text);
+            resetIdleTimer();
             break;
 
         case 'speech':
+            ui?.setStatus('speaking');
+            character?.setState(States.SPEAKING);
+            vfx?.setThemeColor(msg.emotion || 'neutral');
+            if (msg.xp !== undefined) {
+                updateDungeonStats(msg.level, msg.xp);
+                ui?.showFloatingXP(10); // Valeur par défaut d'XP par message
+            }
             handleSpeech(msg);
+            break;
+
+        case 'config':
+            handleConfig(msg);
+            break;
+
+        case 'stats_sync':
+            updateDungeonStats(msg.level, msg.xp);
             break;
 
         case 'error':
             console.error('[Server] Erreur:', msg.message);
             character?.setState(States.IDLE);
             ui?.setStatus('idle');
+            // Show error to user
+            ui?.showError?.(msg.message || "Erreur serveur inconnue");
             break;
 
-        case 'config':
-            handleConfig(msg);
-            break;
         case 'pong':
             break;
     }
 }
 
-function handleConfig({ aura_color, scale }) {
-    if (aura_color) vfx?.setThemeColor(aura_color);
+function handleConfig({ emotion, scale }) {
+    if (emotion) vfx?.setThemeColor(emotion);
     if (scale && character?.model) {
         character.model.scale.setScalar(scale);
     }
+}
+
+/** Update Level & XP Bar with Quadratic Scaling */
+function updateDungeonStats(level, xp) {
+    const lvlEl = document.getElementById('lvl-val');
+    const xpFill = document.getElementById('xp-fill');
+    if (lvlEl) lvlEl.textContent = `LVL ${level}`;
+    
+    if (xpFill) {
+        // Calcul des paliers (lvl-1)^2 * 100 -> (lvl)^2 * 100
+        const currentLvlStart = Math.pow(level - 1, 2) * 100;
+        const nextLvlEnd = Math.pow(level, 2) * 100;
+        const range = nextLvlEnd - currentLvlStart;
+        const progress = ((xp - currentLvlStart) / range) * 100;
+        
+        xpFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+    }
+}
+
+let idleTimer = null;
+function resetIdleTimer() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+        if (character && character.state === States.IDLE) {
+            character.setState(States.THINKING); // Utilise 'thinking' comme pose de méditation
+            vfx?.setThemeColor('thinking'); // Aura turquoise apaisante
+        }
+    }, 45000); // 45 secondes d'inactivité -> Méditation
+}
+
+/** Drag & Drop Handling */
+function setupFileDrop() {
+    const overlay = document.getElementById('drop-overlay');
+    
+    window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (overlay) overlay.style.display = 'flex';
+    });
+    
+    window.addEventListener('dragleave', (e) => {
+        if (overlay) overlay.style.display = 'none';
+    });
+    
+    window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (overlay) overlay.style.display = 'none';
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const fileName = files[0].name;
+            const fileSize = (files[0].size / 1024).toFixed(1);
+            
+            // On envoie une requête spéciale d'analyse d'objet
+            sendToServer('user_input', { 
+                text: `[OBJET DÉPOSÉ] Analyse ce fichier : "${fileName}" (${fileSize} KB).` 
+            });
+            
+            // Effet visuel
+            vfx?.arise();
+            sfx.play('arise', 0.5);
+        }
+    });
 }
 
 function handleStatus(state, text = '') {
@@ -176,9 +317,31 @@ function handleStatus(state, text = '') {
     }
 }
 
-async function handleSpeech({ text, audio, duration_ms, visemes }) {
+async function handleSpeech({ text, audio, duration_ms, visemes, emotion }) {
     // Afficher le texte dans la bulle
     ui?.showSpeech(text);
+    
+    // Gérer l'émotion
+    if (emotion) {
+        let hexColor = '#6600cc'; // Default: neutral/power
+        
+        switch (emotion) {
+            case 'angry':
+                hexColor = '#ff1122'; // Rouge sang
+                if (character) character._playClip('gesture1', false) || character._playClip('talking');
+                break;
+            case 'calm':
+                hexColor = '#11aaff'; // Bleu glacial
+                if (character) character._playClip('breathing', false);
+                break;
+            case 'power':
+                hexColor = '#b829ff'; // Violet intense
+                vfx?.arise(); // Déclencher l'effet arise !
+                break;
+        }
+        
+        vfx?.setThemeColor(hexColor);
+    }
 
     // Lancer le lip-sync basé sur les visèmes du serveur
     if (visemes?.length > 0) {
@@ -239,32 +402,93 @@ async function playAudio(base64Audio, durationMs) {
     }
 }
 
+// ─── Animation Déplacement sur le Bureau (Wander) ─────────────────────────────
+function toggleWander() {
+    isWandering = !isWandering;
+    const btn = ui?.wanderBtn;
+    if (isWandering) {
+        btn?.classList.add('active');
+        wanderX = window.screenX || 50;
+        wanderY = window.screenY || 100;
+        wanderSpeedX = 1.5; // Vitesse de marche
+        
+        if (character) character._playClip('breathing', true); // Peut être remplacé par 'walking'
+        sfx.play('ghost_whoosh', 0.4);
+        wanderLoop();
+    } else {
+        btn?.classList.remove('active');
+        sfx.play('click', 0.3);
+        if (character) character.setState(States.IDLE);
+    }
+}
+
+function wanderLoop() {
+    if (!isWandering) return;
+    
+    wanderX += wanderSpeedX;
+    
+    const screenW = window.screen.availWidth || 1920;
+    const winW = 400; // largeur de la fenêtre PyWebView
+    
+    if (wanderX <= 0) {
+        wanderX = 0;
+        wanderSpeedX *= -1;
+        if(character && character.model) character.model.rotation.y = Math.PI; // Se retourne
+    } else if (wanderX + winW >= screenW) {
+        wanderX = screenW - winW;
+        wanderSpeedX *= -1;
+        if(character && character.model) character.model.rotation.y = 0; // Regarde devant
+    }
+    
+    if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.move_window(wanderX, wanderY);
+    }
+    
+    requestAnimationFrame(wanderLoop);
+}
+
 // ─── Point d'entrée principal ─────────────────────────────────────────────────
 async function main() {
     initScene();
 
-    // VFX (must be after renderer init)
+    console.log('[Main] Initializing VFX...');
     vfx = new VFXManager(renderer, scene, camera);
 
-    // Personnage
+    console.log('[Main] Initializing Character...');
     character = new Character(scene);
-    await character.load('assets/models/sung_jin_woo.glb');
+    
+    // UI
+    ui = new UIManager((userText) => {
+        sendToServer('user_input', { text: userText });
+        // État de réflexion immédiat
+        ui?.setStatus('thinking');
+        character?.setState(States.THINKING);
+        vfx?.setThemeColor('thinking');
+    });
 
-    // Effet 'Arise' au démarrage
-    character.arise();
-    vfx?.arise();
+    // Masquer le loader IMMÉDIATEMENT
+    ui.hideLoader();
+
+    // On n'attend pas toutes les animations pour afficher l'interface (lazy loading)
+    // Droit de glisser des fichiers sur le Monarque
+    setupFileDrop();
+    
+    // Reste de l'init...
+    character.load('assets/models/sung_jin_woo.glb').then(() => {
+         console.log(`[Main] Character loaded with scale: ${character.model.scale.x}`);
+         // Effet 'Arise' au démarrage once loaded
+         character.arise();
+         vfx?.arise();
+         sfx.play('arise', 0.8);
+    }).catch(err => {
+         console.error('[Main] Failed to load character:', err);
+    });
+
+
 
     // Lip-sync
     lipSync = new LipSyncController(character);
     audioLipSync = new AudioLipSync(character);
-
-    // UI
-    ui = new UIManager((userText) => {
-        sendToServer('user_input', { text: userText });
-    });
-
-    // Masquer le loader
-    ui.hideLoader();
 
     // Connexion WebSocket
     connectWebSocket();
@@ -276,12 +500,72 @@ async function main() {
     document.addEventListener('click', () => {
         if (!audioCtx) audioCtx = new AudioContext();
         if (audioCtx.state === 'suspended') audioCtx.resume();
+        sfx.init(); // Init SFX system
     }, { once: true });
 
     // Exposer send pour PyWebView
     window.sendToServer = sendToServer;
 
+    // Bouton de balade
+    if (ui?.wanderBtn) ui.wanderBtn.addEventListener('click', toggleWander);
+
+    // Initialisation du déplacement manuel avec la souris
+    setupCustomDrag();
+
     console.log('[Main] Sung Jin Woo Assistant initialisé ✓');
+}
+
+// ─── Custom Window Dragging ───────────────────────────────────────────────────
+function setupCustomDrag() {
+    let isDragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    const dragElements = [
+        document.getElementById('drag-handle'),
+        document.getElementById('status-bar')
+    ];
+
+    dragElements.forEach(el => {
+        if (!el) return;
+        el.style.cursor = 'grab';
+        
+        el.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // clique gauche seulement
+            isDragging = true;
+            el.style.cursor = 'grabbing';
+            // Offset from the top-left of the window
+            offsetX = e.clientX;
+            offsetY = e.clientY;
+        });
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging && window.pywebview && window.pywebview.api) {
+            // Screen position of the mouse minus the original offsets within the window
+            const newX = e.screenX - offsetX;
+            const newY = e.screenY - offsetY;
+            
+            // Override auto-wandering state if the user manually drags
+            if (isWandering) {
+                isWandering = false;
+                document.getElementById('wander-btn')?.classList.remove('active');
+                if (character) character.setState(States.IDLE);
+            }
+            
+            window.pywebview.api.move_window(newX, newY);
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            dragElements.forEach(el => { if(el) el.style.cursor = 'grab'; });
+            // Save last pos to wanderX/Y variables so it resumes from there later
+            wanderX = window.screenX;
+            wanderY = window.screenY;
+        }
+    });
 }
 
 main().catch(console.error);

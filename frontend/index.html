@@ -20,6 +20,10 @@
       inset: 0;
       background: transparent;
     }
+    
+    .pywebview-drag-region {
+      -webkit-app-region: drag;
+    }
 
     canvas {
       display: block;
@@ -185,6 +189,48 @@
       animation: pulse 1s infinite;
     }
 
+    #wander-btn {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      border: 1px solid rgba(109, 40, 217, 0.5);
+      background: rgba(10, 5, 30, 0.8);
+      color: rgba(200, 170, 255, 0.9);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      backdrop-filter: blur(12px);
+      font-size: 16px;
+    }
+
+    #wander-btn:hover {
+      background: rgba(109, 40, 217, 0.3);
+      box-shadow: 0 0 16px rgba(109, 40, 217, 0.4);
+    }
+    
+    #wander-btn.active {
+      background: rgba(139, 92, 246, 0.4);
+      border-color: #8b5cf6;
+      box-shadow: 0 0 16px rgba(139, 92, 246, 0.6);
+    }
+
+    /* XP Float Animation */
+    .xp-float {
+        position: absolute;
+        top: 20%; right: 20px;
+        color: #8b5cf6;
+        font-weight: 800;
+        font-size: 18px;
+        pointer-events: none;
+        z-index: 500;
+        animation: xp-rise 1.5s ease-out forwards;
+        font-family: 'Rajdhani', sans-serif;
+    }
+    @keyframes xp-rise {
+        0% { transform: translateY(0); opacity: 0; }
+        20% { opacity: 1; }
+        100% { transform: translateY(-60px); opacity: 0; }
+    }
+
     /* Poignée de déplacement */
     #drag-handle {
       position: absolute;
@@ -260,25 +306,71 @@
       0%, 100% { opacity: 0.8; }
       50%       { opacity: 0.4; }
     }
+
+    /* Dungeon Stats */
+    #dungeon-stats {
+        position: absolute;
+        top: 30px;
+        right: 20px;
+        text-align: right;
+        font-family: 'Rajdhani', sans-serif;
+        color: #8b5cf6;
+        text-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+        pointer-events: none;
+        z-index: 100;
+        transition: opacity 0.5s;
+    }
+    #lvl-val { font-size: 24px; font-weight: 700; display: block; letter-spacing: 1px; }
+    #xp-bar { width: 80px; height: 3px; background: rgba(255,255,255,0.05); margin-top: 4px; border-radius: 2px; overflow: hidden; margin-left: auto; }
+    #xp-fill { width: 0%; height: 100%; background: #8b5cf6; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 8px #8b5cf6; }
+
+    /* Drop Zone */
+    #drop-overlay {
+        position: fixed; inset: 0;
+        background: rgba(139, 92, 246, 0.1);
+        border: 2px dashed rgba(139, 92, 246, 0.5);
+        display: none; align-items: center; justify-content: center;
+        z-index: 2000; pointer-events: none;
+        color: white; font-family: 'Rajdhani', sans-serif; font-size: 24px;
+        backdrop-filter: blur(4px);
+    }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <div id="drop-overlay">ANALYSE D'OBJET...</div>
+  
+  <div id="dungeon-stats">
+    <span id="lvl-val">LVL 1</span>
+    <div id="xp-bar"><div id="xp-fill"></div></div>
+  </div>
 
   <!-- Loader d'initialisation -->
   <div id="loader">
     <div class="loader-portal"></div>
     <div class="loader-text">Shadow Monarch s'éveille…</div>
   </div>
+  
+  <script>
+    // Failsafe: Si le JS met trop de temps à charger (ex: 5s), on masque le loader de force
+    setTimeout(() => {
+      const l = document.getElementById('loader');
+      if (l && !l.classList.contains('hidden')) {
+        console.warn('[Failsafe] Masquage forcé du loader.');
+        l.classList.add('hidden');
+        setTimeout(() => l.style.display = 'none', 1000);
+      }
+    }, 5000);
+  </script>
 
   <!-- Scène Three.js -->
   <div id="canvas-container"></div>
 
   <!-- UI Overlay -->
   <div id="ui-overlay">
-    <div id="drag-handle"></div>
+    <div id="drag-handle" class="pywebview-drag-region"></div>
 
-    <div id="status-bar">
+    <div id="status-bar" class="pywebview-drag-region" style="cursor: grab;">
       <div id="status-dot"></div>
       <span id="status-text">En veille</span>
     </div>
@@ -289,22 +381,30 @@
     </div>
 
     <div id="input-area">
-      <button id="mic-btn" title="Microphone">🎤</button>
       <input id="text-input" type="text" placeholder="Parler à Sung Jin Woo…" autocomplete="off" />
       <button id="send-btn" title="Envoyer">➤</button>
     </div>
   </div>
 
-  <!-- Three.js + modules ES (importmap) -->
-  <script type="importmap">
+  <script>
+    window.onerror = function(msg, url, line, col, error) {
+      console.error(`[Global Error] ${msg} at ${url}:${line}:${col}`);
+      return false;
+    };
+  </script>
+
+  <!-- Polyfill for importmap -->
+  <script async src="https://ga.jspm.io/npm:es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+
+  <script type="importmap-shim">
   {
     "imports": {
-      "three":              "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
-      "three/addons/":      "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+      "three":              "./vendor/three/three.module.js",
+      "three/addons/":      "./vendor/three/addons/"
     }
   }
   </script>
 
-  <script type="module" src="main.js"></script>
+  <script type="module-shim" src="main.js"></script>
 </body>
 </html>
